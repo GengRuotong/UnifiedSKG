@@ -43,3 +43,21 @@ class WrappedSeq2SeqTrainingArguments(Seq2SeqTrainingArguments):
         default=None, metadata={
             "help": "The directory to load the model weights from."}
     )
+    domain_name: Optional[str] = field(
+        default=None, metadata={
+            "help": "The name of the domain in mt_summary task"}
+    )
+    ignore_pad_token_for_loss: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to ignore the tokens corresponding to padded labels in the loss computation or not."
+        },
+    )
+    num_beams: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
+            "which is used during ``evaluate`` and ``predict``."
+        },
+    )
+    

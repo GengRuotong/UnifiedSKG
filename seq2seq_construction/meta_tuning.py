@@ -7,7 +7,6 @@ from datasets import DatasetDict
 from random import shuffle
 from torch.utils.data import Dataset, ConcatDataset
 from torch.utils.data.dataset import T_co
-
 from utils.configue import Configure
 
 """
@@ -17,8 +16,9 @@ After we set up the datasets of different tasks, we need to concat them in certa
 which may have some effect on performance.
 
 And we also need to handle the trivial things, since for different data, we need to evaluate them in different ways.
-"""
 
+More details about upsampling: https://blog.csdn.net/qq_42374697/article/details/115016073
+"""
 
 def upsample(data, weight):
     n_data = len(data)
@@ -41,7 +41,9 @@ class MultiTaskWrapper(Dataset):
         # Raw data and size.
         args_path2data = {}
         for args_path, dataset in args_path2dataset.items():
+            print(args_path, dataset, len(dataset))
             args_path2data[args_path] = [dataset[idx] for idx in range(len(dataset))]
+            
 
         # Up-weight.
         temp = meta_args.dataset.upsample_temp
@@ -88,7 +90,7 @@ class MultiTaskWrapper(Dataset):
                 item['arg_path'] = args_path
                 if meta_args.load_multiple_prefix_module_weights_from:
                     item['task_id'] = meta_args.task_name2task_id[os.path.basename(args_path)[:-len('.cfg')]]
-
+                    
         # Subset for dev.
         if section == 'dev' and meta_args.dataset.eval_num:
             for args_path in args_path2data.keys():

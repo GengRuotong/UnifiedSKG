@@ -1,3 +1,4 @@
+
 import collections
 import json
 import time
@@ -37,11 +38,15 @@ class EvalPrediction(NamedTuple):
     items: List[dict]
 
 
-class EvaluateFriendlySeq2SeqTrainer(transformers.trainer_seq2seq.Seq2SeqTrainer):
+class Seq2SeqTrainer_Chinese(transformers.trainer_seq2seq.Seq2SeqTrainer):
     def __init__(
             self,
             evaluator,
             *args: WrappedSeq2SeqTrainingArguments,
+            max_length: Optional[int] = None,
+            num_beams: Optional[int] = None,
+            decoder_start_token_id : Optional[int] = None,
+            eos_token_id : Optional[int] = None,
             eval_examples: Optional[Dataset] = None,
             ignore_pad_token_for_loss: bool = True,
             wandb_run_dir: Optional[str] = None,
@@ -51,73 +56,12 @@ class EvaluateFriendlySeq2SeqTrainer(transformers.trainer_seq2seq.Seq2SeqTrainer
         self.evaluator = evaluator
         self.eval_examples = eval_examples
         self.compute_metrics = self._compute_metrics
+        self._max_length = max_length if max_length is not None else self.args.generation_max_length
+        self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
+        self._decoder_start_token_id = decoder_start_token_id
+        self._eos_token_id = eos_token_id
         self.ignore_pad_token_for_loss = ignore_pad_token_for_loss
         self.wandb_run_dir = wandb_run_dir
-
-    '''def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
-        if not isinstance(self.train_dataset, collections.abc.Sized):
-            return None
-
-        generator = None
-        if self.args.world_size <= 1 and _is_torch_generator_available:
-            generator = torch.Generator()
-            generator.manual_seed(int(torch.empty((), dtype=torch.int64).random_().item()))
-
-        # Build the sampler.
-        if self.args.group_by_length:
-            raise ValueError("Incompatible with curriculum learning")
-            if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
-                lengths = (
-                    self.train_dataset[self.args.length_column_name]
-                    if self.args.length_column_name in self.train_dataset.column_names
-                    else None
-                )
-            else:
-                lengths = None
-            model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
-            if self.args.world_size <= 1:
-                return LengthGroupedSampler(
-                    self.train_dataset,
-                    self.args.train_batch_size,
-                    lengths=lengths,
-                    model_input_name=model_input_name,
-                    generator=generator,
-                )
-            else:
-                return DistributedLengthGroupedSampler(
-                    self.train_dataset,
-                    self.args.train_batch_size,
-                    num_replicas=self.args.world_size,
-                    rank=self.args.process_index,
-                    lengths=lengths,
-                    model_input_name=model_input_name,
-                    seed=self.args.seed,
-                )
-
-        else:
-            if self.args.world_size <= 1:
-                return SequentialSampler(self.train_dataset)  # Sequential
-            elif (
-                    self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
-                    and not self.args.dataloader_drop_last
-            ):
-                raise ValueError("Incompatible with curriculum learning")
-                # Use a loop for TPUs when drop_last is False to have all batches have the same size.
-                return DistributedSamplerWithLoop(
-                    self.train_dataset,
-                    batch_size=self.args.per_device_train_batch_size,
-                    num_replicas=self.args.world_size,
-                    rank=self.args.process_index,
-                    seed=self.args.seed,
-                )
-            else:
-                return DistributedSampler(
-                    self.train_dataset,
-                    num_replicas=self.args.world_size,
-                    rank=self.args.process_index,
-                    shuffle=False,  # Sequential
-                    seed=self.args.seed,
-                )'''
 
     def evaluate(
             self,
@@ -196,10 +140,14 @@ class EvaluateFriendlySeq2SeqTrainer(transformers.trainer_seq2seq.Seq2SeqTrainer
             max_length: Optional[int] = None,
             max_time: Optional[int] = None,
             num_beams: Optional[int] = None,
+            decoder_start_token_id : Optional[int] = None,
+            eos_token_id : Optional[int] = None,
     ) -> PredictionOutput:
         self._max_length = max_length if max_length is not None else self.args.generation_max_length
         self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
         self._max_time = max_time
+        self._decoder_start_token_id = decoder_start_token_id
+        self._eos_token_id = eos_token_id
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -281,6 +229,8 @@ class EvaluateFriendlySeq2SeqTrainer(transformers.trainer_seq2seq.Seq2SeqTrainer
             "num_beams": self._num_beams if self._num_beams is not None else self.model.config.num_beams,
             "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
             "no_repeat_ngram_size": 0,  # FIXME: hard coding the no_repeat_ngram_size
+            "decoder_start_token_id": self._decoder_start_token_id,
+            "eos_token_id": self._eos_token_id,
         }
 
         if "description_input_ids" in inputs:

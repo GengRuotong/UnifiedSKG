@@ -226,7 +226,7 @@ from transformers.models.mpnet.modeling_mpnet import (
     MPNetForTokenClassification,
     MPNetModel,
 )
-from transformers.models.mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
+# from transformers.models.mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from transformers.models.openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from transformers.models.pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
 from transformers.models.prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
@@ -272,6 +272,8 @@ from transformers.models.squeezebert.modeling_squeezebert import (
 )
 # Instead of loading the T5 from the transformers==4.9.1, we choose to load from our prefix-tuning version.
 from .modeling_t5 import T5ForConditionalGeneration, T5Model
+from .modeling_mt5 import MT5ForConditionalGeneration, MT5Model
+
 from transformers.models.tapas.modeling_tapas import (
     TapasForMaskedLM,
     TapasForQuestionAnswering,

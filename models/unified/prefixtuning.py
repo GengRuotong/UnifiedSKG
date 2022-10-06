@@ -4,6 +4,7 @@
 import torch
 from torch import nn
 from transformers import AutoTokenizer
+from .tokenizer_chn import T5PegasusTokenizer
 from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
 
@@ -21,13 +22,19 @@ class Model(PushToHubFriendlyModel):
         print("prefix-tuning sequence length is {}.".format(self.preseqlen))
 
         # Load tokenizer and model.
-        self.tokenizer = AutoTokenizer.from_pretrained(args.bert.location, use_fast=False)
+        if args.bert.description == 't5-pegasus':
+            self.tokenizer = T5PegasusTokenizer.from_pretrained(args.bert.location, use_fast=False)
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(args.bert.location, use_fast=False)
         self.pretrain_model = AutoModelForSeq2SeqLM.from_pretrained(
-            args.bert.location
+            args.bert.location,
+            from_tf=bool(".ckpt" in args.bert.location)
         )
         self.config = self.pretrain_model.config
+
         from ..prompt.modeling_bart import BartForConditionalGeneration
         from ..prompt.modeling_t5 import T5ForConditionalGeneration
+        from ..prompt.modeling_mt5 import MT5ForConditionalGeneration
         if isinstance(self.pretrain_model, BartForConditionalGeneration):
             self.match_n_layer = self.config.decoder_layers
             self.match_n_head = self.config.decoder_attention_heads
@@ -39,12 +46,18 @@ class Model(PushToHubFriendlyModel):
             self.match_n_head = self.config.num_heads
             self.n_embd = self.config.d_model
             self.match_n_embd = self.config.d_kv
+        elif isinstance(self.pretrain_model, (MT5ForConditionalGeneration)):
+            self.match_n_layer = self.config.num_decoder_layers
+            self.match_n_head = self.config.num_heads
+            self.n_embd = self.config.d_model
+            self.match_n_embd = self.config.d_kv
         else:
             raise ValueError("Other models are not supported yet!")
 
         if args.special_tokens:
             self.tokenizer.add_tokens([v for k, v in args.special_tokens])
             self.pretrain_model.resize_token_embeddings(len(self.tokenizer))
+        
 
         # Prefix related.
         self.register_buffer('input_tokens', torch.arange(self.preseqlen).long())
@@ -257,6 +270,7 @@ class Model(PushToHubFriendlyModel):
 
         # Encode description.
         description_representation = self.get_description_representation(kwargs)
+        
 
         # Encode knowledge.
         knowledge_representation = self.get_knowledge_representation(kwargs)

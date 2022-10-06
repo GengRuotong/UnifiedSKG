@@ -46,6 +46,7 @@ from transformers.utils.model_parallel_utils import assert_device_map, get_devic
 from transformers.models.t5.configuration_t5 import T5Config
 
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
@@ -1858,3 +1859,5 @@ class T5EncoderModel(T5PreTrainedModel):
         )
 
         return encoder_outputs
+
+
