@@ -1,26 +1,30 @@
 import logging
 import os
-
 import torch
 import datasets
-from datasets import load_dataset
 from transformers import (
     HfArgumentParser,
     set_seed,
     EarlyStoppingCallback,
+    MBartTokenizer,
+    MBartTokenizerFast,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
 )
+from transformers.data.data_collator import DataCollatorForSeq2Seq
 from transformers.trainer_utils import get_last_checkpoint
 from collections import OrderedDict
 import utils.tool
 from utils.configue import Configure
 from utils.dataset import TokenizedDataset
+from utils.trainer_chn import Seq2SeqTrainer_Chinese
 from utils.trainer import EvaluateFriendlySeq2SeqTrainer
 from utils.training_arguments import WrappedSeq2SeqTrainingArguments
 
 # Huggingface realized the "Seq2seqTrainingArguments" which is the same with "WrappedSeq2SeqTrainingArguments"
 # in transformers==4.10.1 during our work.
 logger = logging.getLogger(__name__)
-
+MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast]
 
 def main() -> None:
     os.environ[
@@ -31,9 +35,11 @@ def main() -> None:
 
     from filelock import FileLock
     import nltk
+    '''
     with FileLock(".lock") as lock:
         nltk.download("punkt", quiet=True)
         nltk.download("stopwords", quiet=True)
+    '''
 
     # Get args
     parser = HfArgumentParser((WrappedSeq2SeqTrainingArguments,))
@@ -59,6 +65,7 @@ def main() -> None:
             **init_args,
         )
         wandb.config.update(training_args, allow_val_change=True)
+
 
     # Detect last checkpoint
     last_checkpoint = None
@@ -93,57 +100,54 @@ def main() -> None:
         cache_root = os.path.join('output', 'cache')
         os.makedirs(cache_root, exist_ok=True)
         meta_tuning_data = {}
+
+        # domain_name for mt_summary task
+        # domain_name:mt_maicai, mt_waimai,mt_maoyanyanchu, mt_youxuan, mt_taxi-yonghu, mt_multi
         for task, arg_path in args.arg_paths:
+            if training_args.domain_name != None and training_args.domain_name != task:
+                continue   
             task_args = Configure.Get(arg_path)
             task_args.bert = args.bert
             print('task_args.bert.location:', task_args.bert.location)
+            
             task_raw_datasets_split: datasets.DatasetDict = datasets.load_dataset(
                 path=task_args.dataset.loader_path,
                 cache_dir=task_args.dataset.data_store_path)
+            
             task_seq2seq_dataset_split: tuple = utils.tool.get_constructor(task_args.seq2seq.constructor)(task_args).\
                 to_seq2seq(task_raw_datasets_split, cache_root)
-
+            
             meta_tuning_data[arg_path] = task_seq2seq_dataset_split
-
         seq2seq_dataset_split: tuple = utils.tool.get_constructor(args.seq2seq.constructor)(args).\
             to_seq2seq(meta_tuning_data)
-
+        
     evaluator = utils.tool.get_evaluator(args.evaluate.tool)(args)
     model = utils.tool.get_model(args.model.name)(args)
     model_tokenizer = model.tokenizer
 
-    seq2seq_train_dataset, seq2seq_eval_dataset, seq2seq_test_dataset = None, None, None
+    if isinstance(model_tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
+        assert (
+            training_args.lang is not None
+        ), f"{model_tokenizer.__class__.__name__} is a multilingual tokenizer which requires --lang argument"
+
+        model_tokenizer.src_lang = training_args.lang
+        model_tokenizer.tgt_lang = training_args.lang
+
+        # For multilingual translation models like mBART-50 and M2M100 we need to force the target language token
+        # as the first generated token. We ask the user to explicitly provide this as --forced_bos_token argument.
+        forced_bos_token_id = (
+            model_tokenizer.lang_code_to_id[training_args.forced_bos_token] if training_args.forced_bos_token is not None else None
+        )
+        model.config.forced_bos_token_id = forced_bos_token_id
+
+    seq2seq_train_dataset, seq2seq_eval_dataset,seq2seq_test_dataset = None, None, None
     if len(seq2seq_dataset_split) == 2:
         seq2seq_train_dataset, seq2seq_eval_dataset = seq2seq_dataset_split
     elif len(seq2seq_dataset_split) == 3:
-        seq2seq_train_dataset, seq2seq_eval_dataset, seq2seq_test_dataset = seq2seq_dataset_split
+        seq2seq_train_dataset, seq2seq_eval_dataset, seq2seq_test_dataset = seq2seq_dataset_split    
     else:
         raise ValueError("Other split not support yet.")
-    '''
-    cache_root = os.path.join('output', 'cache')
-    os.makedirs(cache_root, exist_ok=True)
-    if args.dataset.dataset_name != 'None':
-        raw_datasets_split = load_dataset(
-        args.dataset.dataset_name, args.dataset_config_name, cache_dir=cache_root)
-    else:
-        data_files = {}
-        if args.arg_paths.train_file != 'None':
-            data_files["train"] = args.arg_paths.train_file
-            extension = args.arg_paths.train_file.split(".")[-1]
-        if args.arg_paths.validation_file != 'None':
-            data_files["validation"] = args.arg_paths.validation_file
-            extension = args.arg_paths.validation_file.split(".")[-1]
-        if args.arg_paths.test_file != 'None':
-            data_files["test"] = args.arg_paths.test_file
-            extension = args.arg_paths.test_file.split(".")[-1]
-        raw_datasets_split = load_dataset(extension, data_files=data_files, cache_dir=cache_root)
-
-    seq2seq_train_dataset, seq2seq_eval_dataset, seq2seq_test_dataset = raw_datasets_split["train"], raw_datasets_split["validation"], raw_datasets_split['test']
-
-    evaluator = utils.tool.get_evaluator(args.evaluate.tool)(args)
-    model = utils.tool.get_model(args.model.name)(args)
-    model_tokenizer = model.tokenizer
-'''
+    
     # We wrap the "string" seq2seq data into "tokenized tensor".
     train_dataset = TokenizedDataset(args, training_args, model_tokenizer,
                                      seq2seq_train_dataset) if seq2seq_train_dataset else None
@@ -151,37 +155,73 @@ def main() -> None:
                                     seq2seq_eval_dataset) if seq2seq_eval_dataset else None
     test_dataset = TokenizedDataset(args, training_args, model_tokenizer,
                                     seq2seq_test_dataset) if seq2seq_test_dataset else None
-
+    
     # Initialize our Trainer
     early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=args.seq2seq.patience if args.seq2seq.patience else 5)
-    trainer = EvaluateFriendlySeq2SeqTrainer(
-        args=training_args,
-        model=model,
-        evaluator=evaluator,
-        # We name it "evaluator" while the hugging face call it "Metric",
-        # they are all f(predictions: List, references: List of dict) = eval_result: dict
-        tokenizer=model_tokenizer,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        eval_examples=seq2seq_eval_dataset,
-        wandb_run_dir=wandb.run.dir if "wandb" in training_args.report_to and training_args.local_rank <= 0 else None,
-        callbacks=[early_stopping_callback],
-    )
-    print('Trainer build successfully.')
+    if args.bert.description == 't5-pegasus':
+        # Data collator
+        label_pad_token_id = -100 if training_args.ignore_pad_token_for_loss else model_tokenizer.pad_token_id
+        
+        data_collator = DataCollatorForSeq2Seq(
+            model_tokenizer,
+            model=model,
+            label_pad_token_id=label_pad_token_id,
+            pad_to_multiple_of=8 if training_args.fp16 else None,
+        )   
+        
+        max_length = (
+        training_args.generation_max_length if training_args.generation_max_length is not None
+        else training_args.val_max_target_length
+        )
+        num_beams = training_args.num_beams if training_args.num_beams is not None else training_args.generation_num_beams
+        
+        trainer = Seq2SeqTrainer_Chinese(
+            model=model,
+            args=training_args,
+            evaluator = evaluator,
+            tokenizer=model_tokenizer,
+            train_dataset=train_dataset, 
+            eval_dataset=eval_dataset, 
+            data_collator=data_collator,
+            max_length=max_length, 
+            num_beams=num_beams,decoder_start_token_id=model_tokenizer.cls_token_id,
+            eos_token_id=model_tokenizer.sep_token_id,
+            eval_examples=seq2seq_eval_dataset,
+            wandb_run_dir=wandb.run.dir if "wandb" in training_args.report_to and training_args.local_rank <= 0 else None,
+            callbacks=[early_stopping_callback],
+        )
+
+        print('Trainer for Chinese build successfully.') 
+    
+    else:
+        trainer = EvaluateFriendlySeq2SeqTrainer(
+            args=training_args,
+            model=model,
+            evaluator=evaluator,
+            # We name it "evaluator" while the hugging face call it "Metric",
+            # they are all f(predictions: List, references: List of dict) = eval_result: dict
+            tokenizer=model_tokenizer,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            eval_examples=seq2seq_eval_dataset,
+            # wandb_run_dir=wandb.run.dir if "wandb" in training_args.report_to and training_args.local_rank <= 0 else None,
+            callbacks=[early_stopping_callback],
+        )
+        print('Trainer build successfully.') 
 
     # Load model weights (for --do_train=False or post finetuning).
+    # load_weights_from stores the path of.ckpt file
     if training_args.load_weights_from:
-        state_dict = torch.load(os.path.join(training_args.load_weights_from, transformers.WEIGHTS_NAME), map_location="cpu")
+        state_dict = torch.load(training_args.load_weights_from, map_location="cpu")
         trainer.model.load_state_dict(state_dict, strict=True)
         # release memory
         del state_dict
 
     if args.load_multiple_prefix_module_weights_from:
-        reconstruct_state_dict = OrderedDict()
-
+        reconstruct_state_dict = OrderedDict()    
         # load prefix modules
         for task_name, module_weight_location in args.load_multiple_prefix_module_weights_from:
-            state_dict = torch.load(os.path.join(module_weight_location, transformers.WEIGHTS_NAME), map_location="cpu")
+            state_dict = torch.load(module_weight_location,  map_location="cpu")
             MULTI_PREFIX_ATTR_NAME = "multi_prefix"
             for weight_name, stored_tensor in state_dict.items():
                 if str(weight_name).startswith("pretrain_model"):
@@ -194,7 +234,7 @@ def main() -> None:
 
         # release memory
         del reconstruct_state_dict
-
+ 
     # Training
     if training_args.do_train:
         checkpoint = None
@@ -217,10 +257,16 @@ def main() -> None:
     # Evaluation
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
-        metrics = trainer.evaluate(
-            metric_key_prefix="eval"
+        eval_results = trainer.predict(
+        test_dataset=eval_dataset,
+        test_examples=seq2seq_eval_dataset,
+        metric_key_prefix="eval",
+        max_length=max_length, 
+        num_beams=num_beams, 
+        decoder_start_token_id=model_tokenizer.cls_token_id,
+        eos_token_id=model_tokenizer.sep_token_id,
         )
+        metrics = eval_results.metrics
         max_eval_samples = len(eval_dataset)
         metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
 
@@ -231,17 +277,30 @@ def main() -> None:
         logger.info("*** Predict ***")
 
         predict_results = trainer.predict(
-            test_dataset=test_dataset if test_dataset else eval_dataset,
-            test_examples=seq2seq_test_dataset if seq2seq_test_dataset else seq2seq_eval_dataset,
-            metric_key_prefix="predict"
+        test_dataset=test_dataset if test_dataset else eval_dataset,
+        test_examples=seq2seq_test_dataset if seq2seq_test_dataset else seq2seq_eval_dataset,
+        metric_key_prefix="eval",
+        max_length=max_length, 
+        num_beams=num_beams, 
+        decoder_start_token_id=model_tokenizer.cls_token_id,
+        eos_token_id=model_tokenizer.sep_token_id,
         )
+
         metrics = predict_results.metrics
         max_predict_samples = len(test_dataset)
         metrics["predict_samples"] = min(max_predict_samples, len(test_dataset))
 
         trainer.log_metrics("predict", metrics)
         trainer.save_metrics("predict", metrics)
-
+        
+        if training_args.predict_with_generate:
+            predictions = model_tokenizer.batch_decode(
+                predict_results.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
+            )
+            predictions = [pred.replace(' ', '').strip() for pred in predictions]
+            output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions_test.txt")
+            with open(output_prediction_file, "w") as writer:
+                writer.write("\n".join(predictions))
 
 if __name__ == "__main__":
     main()

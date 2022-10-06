@@ -6,7 +6,7 @@ export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_prefix_tuning
 export WANDB_ENTITY=mt_prefix_tuning
 
-CUDA_VISIBLE_DEVICES=1 python try.py \
+CUDA_VISIBLE_DEVICES=1 python train.py \
     --run_name T5_base_prefix_summary \
     --seed 2 \
     --cfg Salesforce/T5_base_prefix_summary.cfg \
@@ -15,7 +15,7 @@ CUDA_VISIBLE_DEVICES=1 python try.py \
     --do_predict \
     --domain_name mt_maoyanyanchu \
     --predict_with_generate \
-    --num_train_epochs 1 \
+    --num_train_epochs 8 \
     --gradient_accumulation_steps 4 \
     --logging_strategy steps \
     --logging_first_step true \
@@ -29,7 +29,7 @@ CUDA_VISIBLE_DEVICES=1 python try.py \
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \
-    --learning_rate 1e-3 \
+    --learning_rate 1e-4 \
     --predict_with_generate \
     --output_dir output/T5_base_prefix_summary/maoyanyanchu \
     --overwrite_output_dir \
