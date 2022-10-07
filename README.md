@@ -189,7 +189,7 @@ See <a href="https://colab.research.google.com/drive/1f9yTXC3GpSyRJOjzsKceG_bhk-
 3. Add an "Evaluator" for your task under `./metrics`. If a third-party repository is used, remember to add it into [.gitmodules](https://git-scm.com/docs/gitmodules). 
 4. *(optional)* You can add a new "Model" under `./models` for a new model architecture or a new learning algorithm.
 5. Add a config file for your task under `./configure/META_TUNING`.
-6. Add a config file for each of your experiment under `./configure/Salesforce`.
+6. Add a config file for each of your experiment under `./configure/Salesforce`. If the local pretraining model is used, you need to change `bert.location` parameter in the corresponding task configuration file to the storage path of the pretraining model.
 
 ## Misc
 - We name the diretory for experimental config files as Salesforce because we would like to thank Salesforce Research for providing a large number of GPUs. We would also like to thank Amazon Research Awards, ServiceNow Research, and Yale NLP for providing computing resources generously. 
