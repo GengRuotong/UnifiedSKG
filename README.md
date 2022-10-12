@@ -34,6 +34,7 @@ We have expanded on the basis of UnifiedSKG, added **Chinese tokenizer** and mad
   - [Usage](#usage)
     - [Environment setup](#environment-setup)
     - [WandB setup](#wandb-setup)
+    - [Update transfermer library file](#update-transfermer-library-file)
     - [Training](#training)
     - [Load weights](#load-weights)
   - [Code structure overview of UnifiedSKG](#code-structure-overview-of-unifiedskg)
@@ -80,6 +81,23 @@ Setup [WandB](https://wandb.ai/) for logging (registration needed):
 export WANDB_API_KEY=YOUR_WANDB_API_KEY
 export WANDB_PROJECT=YOUR_PROJECT_NAME
 export WANDB_ENTITY=YOUR_TEAM_NAME
+``````
+
+### Update transfermer library file
+
+The transfermer version required by the original UnifiedSKG will report an error `'TypeError: unsupport operand type(s) for +: 'Tensor'and 'list' `when processing Chinese input data. We compared the old and new versions of the transformer and found that the new version of the transformer has added a list of type processing logic, so you need to change the `__call__` function in `/path to your envs/py3.7pytorch1.8new/lib/python3.7/site-packages/transformers/data/data_collator.py` as follows:
+
+``````python
+    for feature in features:
+        remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
+        if isinstance(feature["labels"], list):
+            feature["labels"] = (
+                feature["labels"] + remainder if padding_side == "right" else remainder + feature["labels"]
+            )
+        elif padding_side == "right":
+            feature["labels"] = np.concatenate([feature["labels"], remainder]).astype(np.int64)
+        else:
+            feature["labels"] = np.concatenate([remainder, feature["labels"]]).astype(np.int64)
 ``````
 
 ### Training
