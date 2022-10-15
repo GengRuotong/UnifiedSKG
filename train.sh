@@ -11,10 +11,13 @@ python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.p
     --run_name T5_base_prefix_summary \
     --seed 2 \
     --cfg Salesforce/T5_base_prefix_summary.cfg \
+    --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
+    --domain_name mt_waimai \
+    --data_folder_path data/sample_datas_wo_prefix/single_domain/waimai/ \
+    --output_dir output/T5_base_ft_wo_prefix/single_domain/mt_waimai \
     --do_train \
     --do_eval \
     --do_predict \
-    --domain_name mt_maoyanyanchu \
     --predict_with_generate \
     --num_train_epochs 25 \
     --gradient_accumulation_steps 8 \
@@ -32,7 +35,6 @@ python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.p
     --adafactor true \
     --learning_rate 1e-4 \
     --predict_with_generate \
-    --output_dir output/T5_base_prefix_summary/mt_maoyanyanchu \
     --overwrite_output_dir \
     --per_device_train_batch_size 2 \
     --per_device_eval_batch_size 8 \

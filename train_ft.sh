@@ -7,19 +7,19 @@ export WANDB_PROJECT=T5_base_finetune
 export WANDB_ENTITY=ruotonggeng
 
 # CUDA_VISIBLE_DEVICES=1 python train.py \
-# python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
-python train.py \
+python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
     --run_name T5_base_finetune_summary \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
-    --domain_name mt_maicai \
-    --data_folder_path data/sample_datas_wo_prefix/single_domain/maicai/ \
+    --domain_name mt_waimai \
+    --data_folder_path data/sample_datas_wo_prefix/single_domain/waimai/ \
+    --output_dir output/T5_base_ft_wo_prefix/single_domain/mt_waimai \
     --seed 2 \
     --cfg Salesforce/T5_base_finetune_summary.cfg \
     --do_train \
     --do_eval \
     --do_predict \
     --predict_with_generate \
-    --num_train_epochs 5 \
+    --num_train_epochs 10 \
     --gradient_accumulation_steps 4 \
     --logging_strategy steps \
     --logging_first_step true \
@@ -35,8 +35,6 @@ python train.py \
     --adafactor true \
     --learning_rate 1e-3 \
     --predict_with_generate \
-    --output_dir output/T5_base_ft_wo_prefix/single_domain/mt_maicai \
-    --overwrite_output_dir \
     --per_device_train_batch_size 2 \
     --per_device_eval_batch_size 8 \
     --generation_num_beams 1 \

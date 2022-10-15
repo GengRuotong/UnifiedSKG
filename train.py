@@ -50,7 +50,10 @@ def main() -> None:
     args = Configure.Get(training_args.cfg)
 
     if args.bert.description == 't5-pegasus':
-        args.bert.location = training_args.pretrained_model_path
+        if args.bert.location != None:
+            args.bert.location = training_args.pretrained_model_path
+        else:
+            raise ValueError("Need to provide Chinese pretraining model path.")
      
     if 'checkpoint-???' in args.bert.location:
         args.bert.location = get_last_checkpoint(

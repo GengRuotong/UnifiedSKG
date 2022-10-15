@@ -19,9 +19,10 @@ Code for paper [UnifiedSKG: Unifying and Multi-Tasking Structured Knowledge Grou
 
 **S**tructured **k**nowledge **g**rounding (**SKG**) leverages structured knowledge to complete user requests, such as semantic parsing over databases and question answering over knowledge bases. Since the inputs and outputs of SKG tasks are heterogeneous, they were historically studied in separate by different communities,  which limits systematic and compatible research on SKG. In this paper, we overcome this limitation by proposing the **UnifiedSKG framework**, which unifies **21 SKG tasks** into the text-to-text format, aiming to promote systematic SKG research, instead of being exclusive to a single task, domain, or dataset. We show that large language models like T5, with simple modification when necessary, achieve **state-of-the-art performance on nearly all 21 tasks**. UnifiedSKG facilitates **multi-task learning**. We show that multi-task prefix-tuning benefits most tasks, largely improving the overall performance. UnifiedSKG is a challenging testbed for **zero-shot and few-shot learning**, which T0, GPT-3, and Codex struggle in. UnifiedSKG also enables a series of controlled experiments on **structured knowledge encoding** variants across SKG tasks. We find that T5’s sensitivity to structured knowledge encoding variations varies across tasks. 
 
-We have expanded on the basis of UnifiedSKG, added **Chinese tokenizer** and made UnifiedSKS support the **Chinese pretraining model** (such as the [T5-Pegasus-base](https://huggingface.co/imxly/t5-pegasus) or [T5-Pegasus-small](https://huggingface.co/imxly/t5-pegasus-small) of Zhuiyi Technology)
+We have expanded on the basis of UnifiedSKG, added **Chinese tokenizer** and made UnifiedSKS support the **Chinese pretraining model** (such as the [T5-Pegasus-base](https://huggingface.co/GengRuotong/T5_base_pegasus) or [T5-Pegasus-small](https://huggingface.co/GengRuotong/T5_small_pegasus) of Zhuiyi Technology)
 ## Updates
 - **2022-10-7**: Add `tokenizer_chn.py` and `trainer_chn` on the original framework to support Chinese generation task.
+- **2022-10-15**: Provide data and pretraining model loading interface for Chinese summary task.
 
 ## Content
 
@@ -101,20 +102,61 @@ The transfermer version required by the original UnifiedSKG will report an error
 ``````
 
 ### Training
-
-T5-base prefix-tuning on mt_maoyanyanchu (1 GPU)
+T5-base fine-tuning on mt_maicai (2 GPU)
 ``````shell
-CUDA_VISIBLE_DEVICES=1 python train.py \
-    --run_name T5_base_prefix_summary \
+python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
+    --run_name T5_base_finetune_summary \
+    --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
+    --domain_name mt_waimai \
+    --data_folder_path data/sample_datas_wo_prefix/single_domain/waimai/ \
+    --output_dir output/T5_base_ft_wo_prefix/single_domain/mt_waimai \
     --seed 2 \
-    --cfg Salesforce/T5_base_prefix_summary.cfg \
+    --cfg Salesforce/T5_base_finetune_summary.cfg \
     --do_train \
     --do_eval \
     --do_predict \
-    --domain_name mt_maoyanyanchu \
     --predict_with_generate \
-    --num_train_epochs 8 \
+    --num_train_epochs 5 \
     --gradient_accumulation_steps 4 \
+    --logging_strategy steps \
+    --logging_first_step true \
+    --logging_steps 100 \
+    --evaluation_strategy steps \
+    --eval_steps 500 \
+    --metric_for_best_model avr \
+    --greater_is_better true \
+    --save_strategy steps \
+    --save_steps 1000 \
+    --save_total_limit 1 \
+    --load_best_model_at_end \
+    --adafactor true \
+    --learning_rate 1e-3 \
+    --predict_with_generate \
+    --overwrite_output_dir \
+    --per_device_train_batch_size 2 \
+    --per_device_eval_batch_size 8 \
+    --generation_num_beams 1 \
+    --generation_max_length 128 \
+    --input_max_length 512 \
+    --num_beams=1 
+``````
+
+T5-base prefix-tuning on mt_maicai (2 GPU)
+``````shell
+python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
+    --run_name T5_base_prefix_summary \
+    --seed 2 \
+    --cfg Salesforce/T5_base_prefix_summary.cfg \
+    --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
+    --domain_name mt_waimai \
+    --data_folder_path data/sample_datas_wo_prefix/single_domain/waimai/ \
+    --output_dir output/T5_base_ft_wo_prefix/single_domain/mt_waimai \
+    --do_train \
+    --do_eval \
+    --do_predict \
+    --predict_with_generate \
+    --num_train_epochs 25 \
+    --gradient_accumulation_steps 8 \
     --logging_strategy steps \
     --logging_first_step true \
     --logging_steps 100 \
@@ -129,7 +171,6 @@ CUDA_VISIBLE_DEVICES=1 python train.py \
     --adafactor true \
     --learning_rate 1e-4 \
     --predict_with_generate \
-    --output_dir output/T5_base_prefix_summary/maoyanyanchu \
     --overwrite_output_dir \
     --per_device_train_batch_size 2 \
     --per_device_eval_batch_size 8 \
