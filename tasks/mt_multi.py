@@ -12,6 +12,7 @@
 # args.arg_paths.train_file
 
 import json
+import os
 import datasets
 from datasets import DownloadManager, DatasetInfo
 
@@ -19,7 +20,6 @@ _DESCRIPTION = """\
 MT dataset covers five business areas: maicai, maoyanyanchu, taxi-yonghu, youxuan, and waimai. The main input content comes from the dialogue between the user and the customer service, the summary comes from the solution, and the information has been desensitized
 """
 
-_FOLDER_PATH = "/home/disk1/grt2021/workspace/UnifiedSKG/data/sample_datas_wo_prefix/multi_sample_datas/processed_datas/"
 _TRAINING_FILE = "train.json"
 _VALIDATION_FILE = "valid.json"
 _TEST_FILE = "test.json"
@@ -49,6 +49,7 @@ class MT_SUMMARY(datasets.GeneratorBasedBuilder):
         :param dl_manager:
         :return: [ datasets.SplitGenerator ]
         """
+        _FOLDER_PATH = os.environ['data_folder_path']
         return [
             datasets.SplitGenerator(name=datasets.Split.TRAIN, gen_kwargs={"filepath": _FOLDER_PATH + _TRAINING_FILE}),
             datasets.SplitGenerator(name=datasets.Split.VALIDATION, gen_kwargs={"filepath": _FOLDER_PATH + _VALIDATION_FILE}),

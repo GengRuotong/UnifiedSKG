@@ -12,6 +12,7 @@
 # args.arg_paths.train_file
 
 import json
+import os
 import datasets
 from datasets import DownloadManager, DatasetInfo
 
@@ -49,6 +50,7 @@ class MT_SUMMARY(datasets.GeneratorBasedBuilder):
         :param dl_manager:
         :return: [ datasets.SplitGenerator ]
         """
+        _FOLDER_PATH = os.environ['data_folder_path']
         return [
             datasets.SplitGenerator(name=datasets.Split.TRAIN, gen_kwargs={"filepath": _FOLDER_PATH + _TRAINING_FILE}),
             datasets.SplitGenerator(name=datasets.Split.VALIDATION, gen_kwargs={"filepath": _FOLDER_PATH + _VALIDATION_FILE}),

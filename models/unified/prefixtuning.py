@@ -123,6 +123,12 @@ class Model(PushToHubFriendlyModel):
                 param.requires_grad = False
 
     def get_prompt(self, bsz=None, sample_size=1, description=None, knowledge=None):
+        '''
+        past_key_values ​​adjusted to the required format
+        past_key_values(tuple(tuple(torch.FloatTensor))of lengthconfig.n_layerswith each tuple having 4 tensors of shape
+        (batch_size, num_heads, sequence_length - 1, embed_size_per_head)) — Contains precomputed key and value hidden states 
+        of the attention blocks. Can be used to speed up decoding.
+        '''
         old_bsz = bsz
         bsz = bsz * sample_size
         input_tokens = self.input_tokens.unsqueeze(0).expand(bsz, -1)
@@ -260,6 +266,16 @@ class Model(PushToHubFriendlyModel):
 
         return knowledge
 
+    '''
+    The forward function is to directly input a series of obtained parameters into the model 
+    after splicing attention_mask and prefix_attention_mask. 
+    model source code(e.g. BertSelfAttention.forward()):
+        elif past_key_value is not None:
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+        value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+    '''
     def forward(self,
                 input_ids,
                 attention_mask,

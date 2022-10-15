@@ -44,9 +44,14 @@ def main() -> None:
     # Get args
     parser = HfArgumentParser((WrappedSeq2SeqTrainingArguments,))
     training_args, = parser.parse_args_into_dataclasses()
+    if training_args.data_folder_path != None:
+        os.environ['data_folder_path'] = training_args.data_folder_path
     set_seed(training_args.seed)
     args = Configure.Get(training_args.cfg)
 
+    if args.bert.description == 't5-pegasus':
+        args.bert.location = training_args.pretrained_model_path
+     
     if 'checkpoint-???' in args.bert.location:
         args.bert.location = get_last_checkpoint(
             os.path.dirname(args.bert.location.model_name_or_path))

@@ -4,6 +4,7 @@
 from torch import nn
 from .base import PushToHubFriendlyModel
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+from .tokenizer_chn import T5PegasusTokenizer
 
 
 class Model(PushToHubFriendlyModel):
@@ -12,8 +13,11 @@ class Model(PushToHubFriendlyModel):
         self.args = args
 
         # Load tokenizer and model.
-        self.tokenizer = AutoTokenizer.from_pretrained(args.bert.location, use_fast=False)
-        self.pretrain_model = AutoModelForSeq2SeqLM.from_pretrained(
+        if args.bert.description == 't5-pegasus':
+            self.tokenizer = T5PegasusTokenizer.from_pretrained(args.bert.location, use_fast=False)
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(args.bert.location, use_fast=False)
+        self.pretrain_model = AutoModelForSeq2SeqLM.from_pretrained (
             args.bert.location,
         )
         self.config = self.pretrain_model.config
