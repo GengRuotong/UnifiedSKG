@@ -102,89 +102,25 @@ The transfermer version required by the original UnifiedSKG will report an error
 ``````
 
 ### Training
-T5-base fine-tuning on mt_maicai (2 GPU)
+For MT summary task, we have integrated the above instructions into the `.sh` file, so you only needs to run the following instructions to perform training, verification and testing.
+
+T5-base prefix-tuning 
 ``````shell
-python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
-    --run_name T5_base_finetune_summary \
-    --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
-    --domain_name mt_waimai \
-    --data_folder_path data/sample_datas_wo_prefix/single_domain/waimai/ \
-    --output_dir output/T5_base_ft_wo_prefix/single_domain/mt_waimai \
-    --seed 2 \
-    --cfg Salesforce/T5_base_finetune_summary.cfg \
-    --do_train \
-    --do_eval \
-    --do_predict \
-    --predict_with_generate \
-    --num_train_epochs 5 \
-    --gradient_accumulation_steps 4 \
-    --logging_strategy steps \
-    --logging_first_step true \
-    --logging_steps 100 \
-    --evaluation_strategy steps \
-    --eval_steps 500 \
-    --metric_for_best_model avr \
-    --greater_is_better true \
-    --save_strategy steps \
-    --save_steps 1000 \
-    --save_total_limit 1 \
-    --load_best_model_at_end \
-    --adafactor true \
-    --learning_rate 1e-3 \
-    --predict_with_generate \
-    --overwrite_output_dir \
-    --per_device_train_batch_size 2 \
-    --per_device_eval_batch_size 8 \
-    --generation_num_beams 1 \
-    --generation_max_length 128 \
-    --input_max_length 512 \
-    --num_beams=1 
+sh train_prefix.sh
 ``````
 
-T5-base prefix-tuning on mt_maicai (2 GPU)
-``````shell
-python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
-    --run_name T5_base_prefix_summary \
-    --seed 2 \
-    --cfg Salesforce/T5_base_prefix_summary.cfg \
-    --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
-    --domain_name mt_waimai \
-    --data_folder_path data/sample_datas_wo_prefix/single_domain/waimai/ \
-    --output_dir output/T5_base_ft_wo_prefix/single_domain/mt_waimai \
-    --do_train \
-    --do_eval \
-    --do_predict \
-    --predict_with_generate \
-    --num_train_epochs 25 \
-    --gradient_accumulation_steps 8 \
-    --logging_strategy steps \
-    --logging_first_step true \
-    --logging_steps 100 \
-    --evaluation_strategy steps \
-    --eval_steps 500 \
-    --metric_for_best_model avr \
-    --greater_is_better true \
-    --save_strategy steps \
-    --save_steps 1000 \
-    --save_total_limit 1 \
-    --load_best_model_at_end \
-    --adafactor true \
-    --learning_rate 1e-4 \
-    --predict_with_generate \
-    --overwrite_output_dir \
-    --per_device_train_batch_size 2 \
-    --per_device_eval_batch_size 8 \
-    --generation_num_beams 1 \
-    --generation_max_length 128 \
-    --input_max_length 512 \
-    --num_beams=1 
+T5-base fine-tuning with prefix on 6 domains (mt_maicai, mt_maoyanyanchu, mt_waimai, mt_youxuan, mt_taxi_yonghu, mt_multi)
+``````python
+python bash_train.py
 ``````
-If you want to resume training, remove the ``--overwrite_output_dir`` flag from the above command.
 
-For MT summary task, we have integrated the above instructions into the `train.sh` file, so you only needs to run the following instructions to perform training, verification and testing.
+T5-base fine-tuning without prefix on mt_multi
 ``````shell
-sh train.sh
+sh train_ft.sh
 ``````
+
+If you want to resume training, remove the ``--overwrite_output_dir`` flag from the command in `.sh` file.
+
 
 ### Load weights
 See <a href="https://colab.research.google.com/drive/1f9yTXC3GpSyRJOjzsKceG_bhk-Cw71Ga#scrollTo=r_3-DN0SvC97">

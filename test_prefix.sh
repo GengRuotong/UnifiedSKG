@@ -3,24 +3,21 @@
 
 
 export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
-export WANDB_PROJECT=T5_base_prefix_tuning
-export WANDB_ENTITY=mt_prefix_tuning
+export WANDB_PROJECT=T5_base_finetune
+export WANDB_ENTITY=ruotonggeng
 
 # CUDA_VISIBLE_DEVICES=1 python train.py \
 python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
-    --run_name T5_base_prefix_summary \
+    --run_name T5_base_finetune_summary \
+    --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
+    --domain_name mt_maicai \
+    --data_folder_path data/sample_datas_wo_prefix/single_domain/maicai \
+    --output_dir output/T5_base_prefix_summary/multi_train_single_test/mt_maicai \
     --seed 2 \
     --cfg Salesforce/T5_base_prefix_summary.cfg \
-    --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
-    --domain_name mt_waimai \
-    --data_folder_path data/sample_datas_wo_prefix/single_domain/waimai/ \
-    --output_dir output/T5_base_prefix_summury/single_domain/mt_waimai \
-    --do_train \
-    --do_eval \
     --do_predict \
-    --predict_with_generate \
-    --num_train_epochs 25 \
-    --gradient_accumulation_steps 8 \
+    --num_train_epochs 5 \
+    --gradient_accumulation_steps 4 \
     --logging_strategy steps \
     --logging_first_step true \
     --logging_steps 100 \
@@ -35,11 +32,9 @@ python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.p
     --adafactor true \
     --learning_rate 1e-4 \
     --predict_with_generate \
-    --overwrite_output_dir \
     --per_device_train_batch_size 2 \
     --per_device_eval_batch_size 8 \
     --generation_num_beams 1 \
     --generation_max_length 128 \
     --input_max_length 512 \
     --num_beams=1 
-
