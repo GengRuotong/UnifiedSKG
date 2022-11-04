@@ -20,9 +20,9 @@ _DESCRIPTION = """\
 MT dataset covers five business areas: maicai, maoyanyanchu, taxi-yonghu, youxuan, and waimai. The main input content comes from the dialogue between the user and the customer service, the summary comes from the solution, and the information has been desensitized
 """
 
-_TRAINING_FILE = "train.json"
-_VALIDATION_FILE = "valid.json"
-_TEST_FILE = "test.json"
+_TRAINING_FILE = "/mt_waimai/train.json"
+_VALIDATION_FILE = "/mt_waimai/valid.json"
+_TEST_FILE = "/mt_waimai/test.json"
 
 
 class MT_SUMMARY(datasets.GeneratorBasedBuilder):

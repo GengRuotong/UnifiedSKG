@@ -68,5 +68,10 @@ class WrappedSeq2SeqTrainingArguments(Seq2SeqTrainingArguments):
         default=None, metadata={
             "help": "The directory to load the pretrained model from."}
     )
+    freeze_plm: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to freeze the pre training model parameter, which is only valid under the condition of prefix tuning."}
+    )
 
     

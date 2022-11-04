@@ -49,8 +49,12 @@ def main() -> None:
     set_seed(training_args.seed)
     args = Configure.Get(training_args.cfg)
 
+    # Set whether to freeze pre training language model parameters
+    if args.model.name == 'unified.prefixtuning':
+        args.freeze_plm = training_args.freeze_plm
+
     if args.bert.description == 't5-pegasus':
-        if args.bert.location != None:
+        if training_args.pretrained_model_path != None:
             args.bert.location = training_args.pretrained_model_path
         else:
             raise ValueError("Need to provide Chinese pretraining model path.")

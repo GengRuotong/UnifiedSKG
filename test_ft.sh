@@ -6,13 +6,13 @@ export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_finetune
 export WANDB_ENTITY=ruotonggeng
 
-# CUDA_VISIBLE_DEVICES=1 python train.py \
-python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
-    --run_name T5_base_finetune_summary \
+CUDA_VISIBLE_DEVICES=1 python train.py \
+    --run_name T5_base_finetune_try \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
-    --domain_name mt_maicai \
-    --data_folder_path data/sample_datas_wo_prefix/single_domain/maicai \
-    --output_dir output/T5_base_ft_wo_prefix/multi_train_single_test \
+    --domain_name mt_waimai \
+    --data_folder_path data/sample_datas_wo_prefix/mt_waimai/ \
+    --output_dir output/T5_base_ft_wo_prefix/single_domain/mt_waimai/predict_1500 \
+    --load_weights_from output/T5_base_ft_wo_prefix/single_domain/mt_waimai/checkpoint-1500/pytorch_model.bin \
     --seed 2 \
     --cfg Salesforce/T5_base_finetune_summary.cfg \
     --do_predict \

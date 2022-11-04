@@ -41,7 +41,6 @@ class MultiTaskWrapper(Dataset):
         # Raw data and size.
         args_path2data = {}
         for args_path, dataset in args_path2dataset.items():
-            print(args_path, dataset, len(dataset))
             args_path2data[args_path] = [dataset[idx] for idx in range(len(dataset))]
             
 
@@ -181,6 +180,7 @@ class Constructor(object):
         """
         train_dev_test_data_of_tasks = {'train': {}, "validation": {}, "test": {}}
         for arg_path, dataset in raw_datasets_dict.items():
+            
             if len(dataset) == 2:
                 train_dev_test_data_of_tasks['train'][arg_path] = dataset[0]
                 train_dev_test_data_of_tasks['validation'][arg_path] = dataset[1]
