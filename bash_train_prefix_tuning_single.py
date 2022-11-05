@@ -24,7 +24,7 @@ export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_prefix_tuning_new
 export WANDB_ENTITY=ruotonggeng
 
-CUDA_VISIBLE_DEVICES=2,3 python train.py \
+CUDA_VISIBLE_DEVICES=0,1 python train.py \
     --run_name %s \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm False \

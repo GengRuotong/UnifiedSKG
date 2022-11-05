@@ -65,6 +65,9 @@ pip install datasets==1.14.0
 pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html
 ``````
 
+
+If the cuda version is so high (e.g 11.3) that a higher pytorch version is required(e.g 1.12), you need to change `torch.set_deterministic()` in the `train.py line32` to `torch.use_deterministic_algorithms()`
+
 That will create the environment `py3.7pytorch1.8new` we used. 
 
 ## Usage
@@ -89,6 +92,7 @@ export WANDB_ENTITY=YOUR_TEAM_NAME
 The transfermer version required by the original UnifiedSKG will report an error `'TypeError: unsupport operand type(s) for +: 'Tensor'and 'list' `when processing Chinese input data. We compared the old and new versions of the transformer and found that the new version of the transformer has added a list of type processing logic, so you need to change the `__call__` function in `/path to your envs/py3.7pytorch1.8new/lib/python3.7/site-packages/transformers/data/data_collator.py` as follows:
 
 ``````python
+import numpy as np
     for feature in features:
         remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
         if isinstance(feature["labels"], list):
