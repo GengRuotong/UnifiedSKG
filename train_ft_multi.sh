@@ -22,11 +22,11 @@ CUDA_VISIBLE_DEVICES=0,1 python train.py \
     --logging_first_step true \
     --logging_steps 100 \
     --evaluation_strategy steps \
-    --eval_steps 500 \
+    --eval_steps 1000 \
     --metric_for_best_model avr \
     --greater_is_better true \
     --save_strategy steps \
-    --save_steps 1000 \
+    --save_steps 500 \
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \
@@ -47,7 +47,7 @@ export WANDB_ENTITY=ruotonggeng
 CUDA_VISIBLE_DEVICES=0,1 python train.py \
     --run_name mt_multi \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
-    --data_folder_path data/sample_datas_w_prefix/ \
+    --data_folder_path data/sample_datas_w_prefix_ahead/ \
     --output_dir output/T5_base_ft_w_prefix/multi_domain \
     --seed 2 \
     --cfg configure/Salesforce/T5_base_finetune_summary_all_domains_upsample1.cfg \

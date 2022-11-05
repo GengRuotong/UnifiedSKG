@@ -11,8 +11,8 @@ def mkdir(folder_path):
         print("Folder exists for %s" %(folder_path))
 
 domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai', 'mt_waimai', 'mt_youxuan']
-input_folder = ["data/sample_datas_wo_prefix/", "data/sample_datas_w_prefix/"]
-output_folder = ["new_output/T5_base_ft_wo_prefix/single_domain/", "new_output/T5_base_ft_w_prefix/single_domain/"]
+input_folder = ["data/sample_datas_wo_prefix/", "data/sample_datas_w_prefix_ahead/"]
+output_folder = ["new_output/T5_base_ft_wo_prefix/single_domain/", "new_output/T5_base_ft_w_prefix_ahead/single_domain/"]
 
 for domain_name in domain_list:
     output_path_wo_prefix = output_folder[0] + domain_name
