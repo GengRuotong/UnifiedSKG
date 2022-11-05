@@ -42,8 +42,7 @@ class MultiTaskWrapper(Dataset):
         args_path2data = {}
         for args_path, dataset in args_path2dataset.items():
             args_path2data[args_path] = [dataset[idx] for idx in range(len(dataset))]
-            
-
+    
         # Up-weight.
         temp = meta_args.dataset.upsample_temp
         if temp and temp != 1 and section == 'train':

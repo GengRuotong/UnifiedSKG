@@ -12,7 +12,7 @@ def mkdir(folder_path):
 
 domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai', 'mt_waimai', 'mt_youxuan']
 input_folder = ["data/sample_datas_wo_prefix/", "data/sample_datas_w_prefix/"]
-output_folder = ["output/T5_base_ft_wo_prefix/single_domain/", "output/T5_base_ft_w_prefix/single_domain/"]
+output_folder = ["new_output/T5_base_ft_wo_prefix/single_domain/", "new_output/T5_base_ft_w_prefix/single_domain/"]
 
 for domain_name in domain_list:
     output_path_wo_prefix = output_folder[0] + domain_name
@@ -39,7 +39,7 @@ CUDA_VISIBLE_DEVICES=0,1 python train.py \
     --do_predict \
     --predict_with_generate \
     --num_train_epochs 5 \
-    --gradient_accumulation_steps 4 \
+    --gradient_accumulation_steps 2 \
     --logging_strategy steps \
     --logging_first_step true \
     --logging_steps 100 \
@@ -80,7 +80,7 @@ CUDA_VISIBLE_DEVICES=0,1 python train.py \
     --do_predict \
     --predict_with_generate \
     --num_train_epochs 5 \
-    --gradient_accumulation_steps 4 \
+    --gradient_accumulation_steps 2 \
     --logging_strategy steps \
     --logging_first_step true \
     --logging_steps 100 \

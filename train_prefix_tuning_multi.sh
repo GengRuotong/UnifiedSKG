@@ -24,7 +24,7 @@ CUDA_VISIBLE_DEVICES=2,3 python train.py \
     --logging_first_step true \
     --logging_steps 100 \
     --evaluation_strategy steps \
-    --eval_steps 500 \
+    --eval_steps 1000 \
     --metric_for_best_model avr \
     --greater_is_better true \
     --save_strategy steps \
