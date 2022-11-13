@@ -9,6 +9,7 @@ from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
 
 
+
 class Model(PushToHubFriendlyModel):
     def __init__(self, args):
         super().__init__()
