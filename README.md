@@ -13,7 +13,7 @@
     <br/>
 </p>
 
-Code for paper [UnifiedSKG: Unifying and Multi-Tasking Structured Knowledge Grounding with Text-to-Text Language Models](https://arxiv.org/pdf/2201.05966.pdf). Please refer to our [project page](https://unifiedskg.com/) for up-to-date related resources (e.g., papers, code, tools, tutorials) for Structured Knowledge Grounding. Load our checkpoints from [HuggingFace Model Hub](https://huggingface.co/hkunlp).
+Code for paper [UnifiedSKG: Unifying and Multi-Tasking Structured Knowledge Grounding with Text-to-Text Language Models](https://arxiv.org/abs/2201.05966). Please refer to our [project page](https://unifiedskg.com/) for up-to-date related resources (e.g., papers, code, tools, tutorials) for Structured Knowledge Grounding. Load our checkpoints from [HuggingFace Model Hub](https://huggingface.co/hkunlp).
 
 <img src="pics/unifiedskg.png" align="middle" width="100%">
 
@@ -204,7 +204,7 @@ If you find our work helpful, please cite as
 @article{UnifiedSKG,
       title={UnifiedSKG: Unifying and Multi-Tasking Structured Knowledge Grounding with Text-to-Text Language Models}, 
       author={Tianbao Xie and Chen Henry Wu and Peng Shi and Ruiqi Zhong and Torsten Scholak and Michihiro Yasunaga and Chien-Sheng Wu and Ming Zhong and Pengcheng Yin and Sida I. Wang and Victor Zhong and Bailin Wang and Chengzu Li and Connor Boyle and Ansong Ni and Ziyu Yao and Dragomir Radev and Caiming Xiong and Lingpeng Kong and Rui Zhang and Noah A. Smith and Luke Zettlemoyer and Tao Yu},
-      journal={arXiv preprint arXiv:2201.05966},
+      journal={EMNLP},
       year={2022},
 }
 ```
