@@ -139,4 +139,4 @@ output
 pretrained_model
 wandb
 new_output
-
+.history
