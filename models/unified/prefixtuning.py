@@ -60,6 +60,7 @@ class Model(PushToHubFriendlyModel):
         
 
         # Prefix related.
+        # self.n_embd, self.mid_dim = 768, 512
         self.register_buffer('input_tokens', torch.arange(self.preseqlen).long())
 
         self.wte = nn.Embedding(self.preseqlen, self.n_embd)
@@ -108,6 +109,9 @@ class Model(PushToHubFriendlyModel):
         if self.args.model.freeze_plm:
             for param in self.pretrain_model.parameters():
                 param.requires_grad = False
+            for param in self.control_trans.parameters():
+                print(param.device)
+        
         if self.args.model.freeze_prefix:
             for param in self.wte.parameters():
                 param.requires_grad = False
@@ -129,21 +133,26 @@ class Model(PushToHubFriendlyModel):
         (batch_size, num_heads, sequence_length - 1, embed_size_per_head)) — Contains precomputed key and value hidden states 
         of the attention blocks. Can be used to speed up decoding.
         '''
+        # Decoder Prefix
         old_bsz = bsz
         bsz = bsz * sample_size
-        input_tokens = self.input_tokens.unsqueeze(0).expand(bsz, -1)
+        input_tokens = self.input_tokens.unsqueeze(0).expand(bsz, -1) # bsz, seqlen
         temp_control = self.wte(input_tokens)
         if description is not None:
             temp_control = temp_control + description.repeat_interleave(sample_size, dim=0).unsqueeze(1)
-        past_key_values = self.control_trans(temp_control)  # bsz, seqlen, layer*emb
+        past_key_values = self.control_trans(temp_control)  # bsz, seqlen, 2*layer*head*d_h
+        
         if knowledge is not None:
             past_key_values = torch.cat([past_key_values, self.knowledge_trans(knowledge.repeat_interleave(sample_size, dim=0))], dim=1)
 
         bsz, seqlen, _ = past_key_values.shape
+        
         past_key_values = past_key_values.view(
             bsz, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
-        )
+        ) # bsz = 8, seqlen = 10, past_key_values.shape = torch.Size([8, 10, 24, 12, 64])
         past_key_values = self.dropout(past_key_values)
+        # past_key_values.permute([2, 0, 3, 1, 4]).shape = ([24, 8, 12, 10, 64])
+        # past_key_values.permute([2, 0, 3, 1, 4]).split(2) is a tuple, has 12 numbers, each of them has a size ([2, 8, 12, 10, 64])
         past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
 
         # Cross prefix
@@ -266,16 +275,6 @@ class Model(PushToHubFriendlyModel):
 
         return knowledge
 
-    '''
-    The forward function is to directly input a series of obtained parameters into the model 
-    after splicing attention_mask and prefix_attention_mask. 
-    model source code(e.g. BertSelfAttention.forward()):
-        elif past_key_value is not None:
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-        value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-    '''
     def forward(self,
                 input_ids,
                 attention_mask,

@@ -317,6 +317,7 @@ class T5Attention(nn.Module):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
+        # d_model = inner_dim
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -422,7 +423,7 @@ class T5Attention(nn.Module):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
         """
-        # Input is (batch_size, seq_length, dim)
+        # Input hidden_states.shape is (batch_size, seq_length, dim) torch.Size([1, 512, 768])
         # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
@@ -1624,6 +1625,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         hidden_states = encoder_outputs[0]
 
         if self.model_parallel:
+            print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+            print(self.decoder.first_device)
             torch.cuda.set_device(self.decoder.first_device)
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:

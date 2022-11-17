@@ -5,7 +5,7 @@ export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_ft_wo_prefix
 export WANDB_ENTITY=ruotonggeng
 
-CUDA_VISIBLE_DEVICES=0,1 python train.py \
+CUDA_VISIBLE_DEVICES=1 python train.py \
     --run_name mt_multi \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --data_folder_path data/sample_datas_wo_prefix/ \
@@ -33,8 +33,8 @@ CUDA_VISIBLE_DEVICES=0,1 python train.py \
     --learning_rate 1e-4 \
     --predict_with_generate \
     --overwrite_output_dir \
-    --per_device_train_batch_size 4 \
-    --per_device_eval_batch_size 8 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 16 \
     --generation_num_beams 1 \
     --generation_max_length 128 \
     --input_max_length 512 \

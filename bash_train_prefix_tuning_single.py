@@ -10,9 +10,10 @@ def mkdir(folder_path):
     else:
         print("Folder exists for %s" %(folder_path))
 
-domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai', 'mt_waimai', 'mt_youxuan']
+# domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai', 'mt_waimai', 'mt_youxuan']
+domain_list = ['mt_maoyanyanchu']
 input_folder = "data/sample_datas_wo_prefix/"
-output_folder = "output/T5_base_prefix_tuning/single_domain/"
+output_folder = "output/T5_base_prefix_tuning/single_domain/try/"
 
 for domain_name in domain_list:
     output_path = output_folder + domain_name
@@ -24,7 +25,7 @@ export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_prefix_tuning_new
 export WANDB_ENTITY=ruotonggeng
 
-CUDA_VISIBLE_DEVICES=0,1 python train.py \
+CUDA_VISIBLE_DEVICES=1 python train.py \
     --run_name %s \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm False \
@@ -54,8 +55,8 @@ CUDA_VISIBLE_DEVICES=0,1 python train.py \
     --learning_rate 1e-4 \
     --predict_with_generate \
     --overwrite_output_dir \
-    --per_device_train_batch_size 8 \
-    --per_device_eval_batch_size 16 \
+    --per_device_train_batch_size 2 \
+    --per_device_eval_batch_size 2 \
     --generation_num_beams 1 \
     --generation_max_length 128 \
     --input_max_length 512 \
