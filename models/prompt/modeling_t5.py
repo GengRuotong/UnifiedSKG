@@ -45,8 +45,6 @@ from transformers.utils import logging
 from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
 from transformers.models.t5.configuration_t5 import T5Config
 
-
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
@@ -1625,8 +1623,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         hidden_states = encoder_outputs[0]
 
         if self.model_parallel:
-            print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
-            print(self.decoder.first_device)
             torch.cuda.set_device(self.decoder.first_device)
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:

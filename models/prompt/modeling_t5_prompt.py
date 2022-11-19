@@ -171,6 +171,9 @@ class T5Stack(T5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
+    def set_input_embeddings(self, new_embeddings):
+        self.embed_tokens = new_embeddings
+
     def forward(
             self,
             input_ids=None,
@@ -185,7 +188,8 @@ class T5Stack(T5PreTrainedModel):
             output_attentions=None,
             output_hidden_states=None,
             return_dict=None,
-            past_prompt=None,  # TODO: Chen
+            encoder_prompt=None,  # TODO: Chen
+            decoder_prompt=None,
     ):
         # Model parallel
         if self.model_parallel:
@@ -214,10 +218,24 @@ class T5Stack(T5PreTrainedModel):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
-            if past_prompt is not None:
+            if not self.is_decoder:
+                encoder_prompts = encoder_prompt["prompts"].to(self.device)  
+                input_prefix_attention_mask = encoder_prompt["inputs_prefix_attention_mask"].to(self.device)
                 raw_embeds = self.embed_tokens(input_ids)
-                inputs_embeds = torch.cat((past_prompt, raw_embeds), dim=1)
-
+                inputs_embeds = torch.cat((encoder_prompts, raw_embeds), dim=1)
+                attention_mask = torch.cat((input_prefix_attention_mask, attention_mask), dim=1)
+            else:
+                decoder_prompts = decoder_prompt["prompts"].to(self.device)
+                past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+                if past_key_values_length == 0:
+                    raw_embeds = self.embed_tokens(input_ids)
+                    inputs_embeds = torch.cat((decoder_prompts, raw_embeds), dim=1)
+                    input_prefix_attention_mask = decoder_prompt["inputs_prefix_attention_mask"].to(self.device)
+                    input_shape = inputs_embeds.size()[:-1]
+                else:
+                    inputs_embeds = self.embed_tokens(input_ids)
+                    input_shape = inputs_embeds.size()[:-1]
+                
         batch_size, seq_length = input_shape
 
         # required mask seq length can be calculated via length of past
@@ -249,6 +267,8 @@ class T5Stack(T5PreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
+            input_prefix_attention_mask = decoder_prompt["inputs_prefix_attention_mask"].to(self.device)
+            encoder_attention_mask = torch.cat((input_prefix_attention_mask, encoder_attention_mask), dim=1)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
@@ -880,6 +900,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
                 decoder_head_mask = head_mask
 
+        encoder_prompt = past_prompt["encoder_prompt"] if past_prompt else None
+        decoder_prompt = past_prompt["decoder_prompt"] if past_prompt else None
+        _, seqlen, _ = encoder_prompt["prompts"].shape
+
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
@@ -891,7 +915,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                past_prompt=past_prompt,  # TODO: Chen
+                encoder_prompt=encoder_prompt,  # TODO: Chen
+                decoder_prompt=decoder_prompt,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -943,10 +968,15 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            past_prompt=past_prompt,  # TODO: Chen
+            encoder_prompt=encoder_prompt,  # TODO: Chen
+            decoder_prompt=decoder_prompt,
         )
 
         sequence_output = decoder_outputs[0]
+        if past_key_values is None:
+            sequence_output = sequence_output[:, seqlen:, :].contiguous()
+        else:
+            sequence_output = sequence_output
 
         # Set device for model parallelism
         if self.model_parallel:
