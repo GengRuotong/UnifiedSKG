@@ -7,7 +7,11 @@ from transformers import AutoTokenizer
 from .tokenizer_chn import T5PegasusTokenizer
 from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
+from transformers.models.mt5.configuration_mt5 import MT5Config
 
+from ..prompt.modeling_bart import BartForConditionalGeneration
+from ..prompt.modeling_mt5_prompt import MT5ForConditionalGeneration
+from ..prompt.modeling_t5_prompt import T5ForConditionalGeneration
 
 class Model(PushToHubFriendlyModel):
     def __init__(self, args):
@@ -25,15 +29,13 @@ class Model(PushToHubFriendlyModel):
             self.tokenizer = T5PegasusTokenizer.from_pretrained(args.bert.location, use_fast=False)
         else:
             self.tokenizer = AutoTokenizer.from_pretrained(args.bert.location, use_fast=False)
+
+        AutoModelForSeq2SeqLM._model_mapping[MT5Config] = MT5ForConditionalGeneration
         self.pretrain_model = AutoModelForSeq2SeqLM.from_pretrained(
             args.bert.location,
             from_tf=bool(".ckpt" in args.bert.location)
         )
         self.config = self.pretrain_model.config
-
-        from ..prompt.modeling_bart import BartForConditionalGeneration
-        from ..prompt.modeling_mt5 import MT5ForConditionalGeneration
-        from ..prompt.modeling_t5_prompt import T5ForConditionalGeneration
 
         if isinstance(self.pretrain_model, BartForConditionalGeneration):
             self.match_n_layer = self.config.decoder_layers
@@ -183,6 +185,8 @@ class Model(PushToHubFriendlyModel):
         past_prompt = self.get_prompt(
             bsz=bsz, sample_size=kwargs['num_beams'], description=description_representation,
         )
+        # encoder_prompt = past_prompt["encoder_prompt"] if past_prompt else None
+        # decoder_prompt = past_prompt["decoder_prompt"] if past_prompt else None
         generated_ids = self.pretrain_model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
