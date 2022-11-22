@@ -15,7 +15,6 @@
 """ PyTorch mT5 model."""
 from transformers.utils import logging
 from ..prompt.modeling_t5 import T5EncoderModel, T5ForConditionalGeneration, T5Model
-# from ..prompt.modeling_t5_prompt import T5EncoderModel, T5ForConditionalGeneration, T5Model
 from transformers.models.mt5.configuration_mt5 import MT5Config
 
 
