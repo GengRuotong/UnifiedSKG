@@ -11,7 +11,6 @@ from transformers import (
     MBart50Tokenizer,
     MBart50TokenizerFast,
 )
-from transformers.data.data_collator import DataCollatorForSeq2Seq
 from transformers.trainer_utils import get_last_checkpoint
 from collections import OrderedDict
 import utils.tool
@@ -40,17 +39,17 @@ def main() -> None:
         nltk.download("punkt", quiet=True)
         nltk.download("stopwords", quiet=True)
     '''
-
     # Get args
     parser = HfArgumentParser((WrappedSeq2SeqTrainingArguments,))
     training_args, = parser.parse_args_into_dataclasses()
+    
     if training_args.data_folder_path != None:
         os.environ['data_folder_path'] = training_args.data_folder_path
     set_seed(training_args.seed)
     args = Configure.Get(training_args.cfg)
 
     # Set whether to freeze pre training language model parameters
-    if args.model.name == 'unified.prefixtuning':
+    if 'unified.prefixtuning' in args.model.name:
         args.freeze_plm = training_args.freeze_plm
 
     if args.bert.description == 't5-pegasus':
@@ -165,27 +164,18 @@ def main() -> None:
     eval_dataset = TokenizedDataset(args, training_args, model_tokenizer,
                                     seq2seq_eval_dataset) if seq2seq_eval_dataset else None
     test_dataset = TokenizedDataset(args, training_args, model_tokenizer,
+
                                     seq2seq_test_dataset) if seq2seq_test_dataset else None
-    
+  
     # Initialize our Trainer
     early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=args.seq2seq.patience if args.seq2seq.patience else 5)
     if args.bert.description == 't5-pegasus':
-        # Data collator
-        label_pad_token_id = -100 if training_args.ignore_pad_token_for_loss else model_tokenizer.pad_token_id
-        
-        data_collator = DataCollatorForSeq2Seq(
-            model_tokenizer,
-            model=model,
-            label_pad_token_id=label_pad_token_id,
-            pad_to_multiple_of=8 if training_args.fp16 else None,
-        )   
         
         max_length = (
         training_args.generation_max_length if training_args.generation_max_length is not None
         else training_args.val_max_target_length
         )
         num_beams = training_args.num_beams if training_args.num_beams is not None else training_args.generation_num_beams
-        
         trainer = Seq2SeqTrainer_Chinese(
             model=model,
             args=training_args,
@@ -193,7 +183,7 @@ def main() -> None:
             tokenizer=model_tokenizer,
             train_dataset=train_dataset, 
             eval_dataset=eval_dataset, 
-            data_collator=data_collator,
+            # data_collator=data_collator,
             max_length=max_length, 
             num_beams=num_beams,
             decoder_start_token_id=model_tokenizer.cls_token_id,

@@ -9,11 +9,11 @@ export WANDB_ENTITY=ruotonggeng
 CUDA_VISIBLE_DEVICES=0 python train.py \
     --run_name mt_multi_phm \
     --seed 2 \
-    --cfg Salesforce/T5_base_prefix_summary_all_domains_upsample1_phm.cfg \
+    --cfg Salesforce/T5_base_prefix_summary_all_domains_upsample1.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
-    --output_dir output/T5_base_prefix_tuning/multi_domain_upsample1_phm/ \
+    --output_dir output/T5_base_prefix_tuning/multi_domain_upsample1/ \
     --do_train \
     --do_eval \
     --do_predict \

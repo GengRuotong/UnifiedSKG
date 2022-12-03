@@ -543,7 +543,6 @@ class T5Attention(nn.Module):
 
         # present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None  # TODO: Chen
         outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
-
         if output_attentions:
             outputs = outputs + (attn_weights,)
         return outputs
@@ -579,7 +578,7 @@ class T5LayerSelfAttention(nn.Module):
             prefix=prefix,  # TODO: Chen
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        outputs = (hidden_states,) + attention_output[1:]  # (hidden_states) + (present_key_value_state,) + (position_bias,)
         return outputs
 
 
@@ -1480,17 +1479,16 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.model_dim = config.d_model
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
-
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
-
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
+        decoder_config.output_hidden_states = True
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
@@ -1619,7 +1617,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
-
+        
+        # last hidden state
         hidden_states = encoder_outputs[0]
 
         if self.model_parallel:
@@ -1686,6 +1685,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs

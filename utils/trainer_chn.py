@@ -251,6 +251,7 @@ class Seq2SeqTrainer_Chinese(transformers.trainer_seq2seq.Seq2SeqTrainer):
         )
         # in case the batch is shorter than max length, the output should be padded
         if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
+            
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
 
         with torch.no_grad():

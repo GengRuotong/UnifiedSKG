@@ -73,5 +73,3 @@ class WrappedSeq2SeqTrainingArguments(Seq2SeqTrainingArguments):
         metadata={
             "help": "Whether to freeze the pre training model parameter, which is only valid under the condition of prefix tuning."}
     )
-
-    

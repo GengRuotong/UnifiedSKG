@@ -43,7 +43,7 @@ class TrainDataset(Dataset):
         self.args = args
         self.raw_datasets = raw_datasets
         # cache_path = os.path.join(cache_root, 'summary_train.cache')
-        chache_name = args.model.description.split(':')[1].strip() 
+        chache_name = args.model.description.strip() 
         cache_path = os.path.join(cache_root, chache_name + '_train.cache')
         if os.path.exists(cache_path) and args.dataset.use_cache:
             self.raw_examples, self.full_src_lst, self.full_tgt_lst = torch.load(cache_path)
@@ -77,7 +77,7 @@ class DevDataset(Dataset):
         self.raw_datasets = raw_datasets
 
         # cache_path = os.path.join(cache_root, 'summary_validation.cache')
-        chache_name = args.model.description.split(':')[1].strip() 
+        chache_name = args.model.description.strip() 
         cache_path = os.path.join(cache_root, chache_name + '_validation.cache')
         if os.path.exists(cache_path) and args.dataset.use_cache:
             self.full_src_lst, self.full_tgt_lst = torch.load(cache_path)
@@ -113,7 +113,7 @@ class TestDataset(Dataset):
         self.raw_datasets = raw_datasets
 
         # cache_path = os.path.join(cache_root, 'summary_test.cache')
-        chache_name = args.model.description.split(':')[1].strip() 
+        chache_name = args.model.description.strip() 
         cache_path = os.path.join(cache_root, chache_name + '_test.cache')        
         if os.path.exists(cache_path) and args.dataset.use_cache:
             self.full_src_lst, self.full_tgt_lst = torch.load(cache_path)

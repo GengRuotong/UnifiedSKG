@@ -9,7 +9,6 @@ from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
 
 
-
 class Model(PushToHubFriendlyModel):
     def __init__(self, args):
         super().__init__()
@@ -42,12 +41,12 @@ class Model(PushToHubFriendlyModel):
             self.n_embd = self.config.d_model
             assert self.n_embd % self.match_n_head == 0
             self.match_n_embd = self.n_embd // self.match_n_head # huggingface BART's dim of kv need to be calculated
-        elif isinstance(self.pretrain_model, (T5ForConditionalGeneration)):
+        elif isinstance(self.pretrain_model, T5ForConditionalGeneration):
             self.match_n_layer = self.config.num_decoder_layers
             self.match_n_head = self.config.num_heads
             self.n_embd = self.config.d_model
             self.match_n_embd = self.config.d_kv
-        elif isinstance(self.pretrain_model, (MT5ForConditionalGeneration)):
+        elif isinstance(self.pretrain_model, MT5ForConditionalGeneration):
             self.match_n_layer = self.config.num_decoder_layers
             self.match_n_head = self.config.num_heads
             self.n_embd = self.config.d_model
@@ -110,8 +109,6 @@ class Model(PushToHubFriendlyModel):
         if self.args.model.freeze_plm:
             for param in self.pretrain_model.parameters():
                 param.requires_grad = False
-            for param in self.control_trans.parameters():
-                print(param.device)
         
         if self.args.model.freeze_prefix:
             for param in self.wte.parameters():
