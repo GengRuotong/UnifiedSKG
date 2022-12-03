@@ -20,7 +20,7 @@ CUDA_VISIBLE_DEVICES=1 python train.py \
     --domain_name %s \
     --data_folder_path %s \
     --output_dir %s \
-    --seed 2 \
+    --seed 114514 \
     --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_prelen30_relu_freeze_plm_mid128.cfg \
     --do_train \
     --do_eval \
