@@ -18,7 +18,7 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
     --do_eval \
     --do_predict \
     --predict_with_generate \
-    --num_train_epochs 35 \
+    --num_train_epochs 50 \
     --gradient_accumulation_steps 1 \
     --logging_strategy steps \
     --logging_first_step true \
