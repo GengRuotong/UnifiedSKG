@@ -124,6 +124,7 @@ class Model(PushToHubFriendlyModel):
                 param.requires_grad = False
             for param in self.control_trans_enc.parameters():
                 param.requires_grad = False
+    
 
     def get_prompt(self, bsz=None, sample_size=1, description=None, knowledge=None):
         '''

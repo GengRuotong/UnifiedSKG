@@ -27,7 +27,7 @@ def weight_sum_batched(weight: torch.Tensor, feature: torch.Tensor) -> torch.Ten
     return torch.stack(result, dim=0)
 
 def matvec_product(W: torch.Tensor, x: torch.Tensor,
-                       bias: Optional[torch.Tensor],
+                       bias: Union[None, torch.Tensor],
                        phm_rule: Union[None, torch.Tensor],
                        weight: torch.Tensor,
                        kronecker_prod_gate=False) -> torch.Tensor:
@@ -56,7 +56,6 @@ def matvec_product(W: torch.Tensor, x: torch.Tensor,
     if bias is not None:
         y += bias
     return y
-
 
 class PHMLinear(torch.nn.Module):
     def __init__(self,
@@ -99,7 +98,8 @@ class PHMLinear(torch.nn.Module):
         if self.bias_flag:
             self.b = nn.Parameter(torch.Tensor(self.out_features))
         else:
-            self.register_parameter('bias', None)
+            # self.register_parameter('bias', None)
+            self.b = None
         self.reset_parameters()
 
 
@@ -172,6 +172,7 @@ class PHMLinearBlock(torch.nn.Module):
                  phm_dim=4,
                  phm_rule: Union[None, torch.Tensor] = None,
                  c_init: str = "normal",
+                 bias: bool = True,
                  shared_phm_rule=True,
                  factorized_phm=True,
                  phm_init_range=0.0001,
@@ -186,6 +187,7 @@ class PHMLinearBlock(torch.nn.Module):
         self.phm_rule = phm_rule
         self.shared_phm_rule = shared_phm_rule
         self.c_init = c_init
+        self.bias = bias
         self.factorized_phm = factorized_phm
         self.phm_init_range = phm_init_range
         self.kronecker_prod_gate = kronecker_prod_gate
@@ -204,7 +206,8 @@ class PHMLinearBlock(torch.nn.Module):
                                 in_features=self.in_features, 
                                 out_features=self.out_features, 
                                 phm_dim=self.phm_dim, 
-                                factorized_phm=self.factorized_phm, 
+                                factorized_phm=self.factorized_phm,
+                                bias=self.bias, 
                                 kronecker_prod_gate=self.kronecker_prod_gate
                               ) for i in range(2*self.layer_num)
                     ]

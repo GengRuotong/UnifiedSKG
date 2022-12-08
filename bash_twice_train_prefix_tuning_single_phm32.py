@@ -3,12 +3,13 @@ import os
 
 domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai']
 input_folder = "data/sample_datas_wo_prefix/"
-output_folder = "output/T5_base_prefix_tuning_3domains_relu_mid128_lr5e-4/single_domain/"
+output_folder = "output/T5_base_prefix_tuning/single_domain_twice_train_phm32/"
 
 for domain_name in domain_list:
     output_path = output_folder + domain_name
 
     os.system("""
+export HF_DATASETS_CACHE="/mnt/dolphinfs/hdd_pool/docker/user/hadoop-aipnlp/zengweihao02/cache"
 export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_prefix_tuning_explore
 export WANDB_ENTITY=ruotonggeng
@@ -20,13 +21,14 @@ CUDA_VISIBLE_DEVICES=1 python train.py \
     --domain_name %s \
     --data_folder_path %s \
     --output_dir %s \
-    --seed 114514 \
-    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_prelen30_relu_freeze_plm_mid128.cfg \
+    --seed 2 \
+    --cfg Salesforce/Salesforce/T5_base_prefix_summary_3domains_upsample2_factorized_phm_32.cfg \
     --do_train \
     --do_eval \
     --do_predict \
+    --load_weights_from output/T5_base_prefix_tuning/multi_domain_phm_32/checkpoint-135000/pytorch_model.bin \
     --predict_with_generate \
-    --num_train_epochs 35 \
+    --num_train_epochs 15 \
     --gradient_accumulation_steps 1 \
     --logging_strategy steps \
     --logging_first_step true \
@@ -40,8 +42,7 @@ CUDA_VISIBLE_DEVICES=1 python train.py \
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \
-    --learning_rate 5e-4 \
-    --warmup_steps 500 \
+    --learning_rate 1e-3 \
     --overwrite_output_dir \
     --per_device_train_batch_size 16 \
     --per_device_eval_batch_size 32 \
@@ -50,4 +51,4 @@ CUDA_VISIBLE_DEVICES=1 python train.py \
     --input_max_length 512 \
     --num_beams=1 
 
-""" %(domain_name + '3domains_relu_mid128_lr5e-4', domain_name, input_folder, output_path))
+""" %(domain_name + 'twice_tune_phm32', domain_name, input_folder, output_path))

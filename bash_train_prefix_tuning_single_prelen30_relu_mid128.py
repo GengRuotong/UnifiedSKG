@@ -3,7 +3,7 @@ import os
 
 domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai']
 input_folder = "data/sample_datas_wo_prefix/"
-output_folder = "output/T5_base_prefix_tuning_3domains_relu_mid128/single_domain/"
+output_folder = "output/T5_base_prefix_tuning_3domains_relu_mid128_prelen30/single_domain/"
 
 for domain_name in domain_list:
     output_path = output_folder + domain_name
@@ -20,7 +20,7 @@ CUDA_VISIBLE_DEVICES=1 python train.py \
     --domain_name %s \
     --data_folder_path %s \
     --output_dir %s \
-    --seed 114514 \
+    --seed 2 \
     --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_prelen30_relu_freeze_plm_mid128.cfg \
     --do_train \
     --do_eval \
@@ -50,4 +50,4 @@ CUDA_VISIBLE_DEVICES=1 python train.py \
     --input_max_length 512 \
     --num_beams=1 
 
-""" %(domain_name + '3domains_relu_mid128_lr1e-3', domain_name, input_folder, output_path))
+""" %(domain_name + '3domains_relu_mid128_prelen30', domain_name, input_folder, output_path))

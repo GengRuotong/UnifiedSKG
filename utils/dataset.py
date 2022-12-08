@@ -44,12 +44,8 @@ class TokenizedDataset(Dataset):
                 ######################
                 if self.args.model.knowledge_usage == 'concatenate' or self.args.model.knowledge_usage is None:
                     # seq_in  = "text_in ; structured knowledge: struct_in"
-                    print("hahaahahahahahahahahaah")
-                    print(raw_item["struct_in"])
-                    if raw_item["struct_in"] != '':
-                        seq_in = "{} ; {}".format(raw_item["text_in"], raw_item["struct_in"])
-                    else:
-                        seq_in = "{}".format(raw_item["text_in"])
+                    seq_in = "{} ; {}".format(raw_item["text_in"], raw_item["struct_in"])
+                    
                 elif self.args.model.knowledge_usage == 'separate':
                     # seq_in  = "text_in"
                     seq_in = raw_item["text_in"]

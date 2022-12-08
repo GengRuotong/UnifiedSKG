@@ -19,6 +19,7 @@ from utils.dataset import TokenizedDataset
 from utils.trainer_chn import Seq2SeqTrainer_Chinese
 from utils.trainer import EvaluateFriendlySeq2SeqTrainer
 from utils.training_arguments import WrappedSeq2SeqTrainingArguments
+import joblib
 
 # Huggingface realized the "Seq2seqTrainingArguments" which is the same with "WrappedSeq2SeqTrainingArguments"
 # in transformers==4.10.1 during our work.
@@ -50,7 +51,7 @@ def main() -> None:
 
     # Set whether to freeze pre training language model parameters
     if 'unified.prefixtuning' in args.model.name:
-        args.freeze_plm = training_args.freeze_plm
+        args.model.freeze_plm = training_args.freeze_plm
 
     if args.bert.description == 't5-pegasus':
         if training_args.pretrained_model_path != None:
@@ -166,9 +167,9 @@ def main() -> None:
     test_dataset = TokenizedDataset(args, training_args, model_tokenizer,
 
                                     seq2seq_test_dataset) if seq2seq_test_dataset else None
-  
+
     # Initialize our Trainer
-    early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=args.seq2seq.patience if args.seq2seq.patience else 5)
+    early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=args.seq2seq.patience if args.seq2seq.patience else 5, early_stopping_threshold=args.seq2seq.threshold if args.seq2seq.threshold else 0.0)
     if args.bert.description == 't5-pegasus':
         
         max_length = (
