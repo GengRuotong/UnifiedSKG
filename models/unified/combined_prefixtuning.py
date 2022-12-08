@@ -6,6 +6,7 @@ from collections import OrderedDict
 import torch
 from torch import nn
 from transformers import AutoTokenizer
+from .tokenizer_chn import T5PegasusTokenizer
 
 from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
@@ -196,22 +197,30 @@ class Model(PushToHubFriendlyModel):
         ]
 
         # Load tokenizer and model.
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        if args.bert.description == 't5-pegasus':
+            self.tokenizer = T5PegasusTokenizer.from_pretrained(args.bert.location, use_fast=False)
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(
             args.bert.location, use_fast=False
         )
         self.pretrain_model = AutoModelForSeq2SeqLM.from_pretrained(args.bert.location)
         self.config = self.pretrain_model.config
         from ..prompt.modeling_bart import BartForConditionalGeneration
         from ..prompt.modeling_t5 import T5ForConditionalGeneration
+        from ..prompt.modeling_mt5 import MT5ForConditionalGeneration
 
         if isinstance(self.pretrain_model, BartForConditionalGeneration):
             self.match_n_layer = self.config.decoder_layers
             self.match_n_head = self.config.decoder_attention_heads
         elif isinstance(
-            self.pretrain_model, T5ForConditionalGeneration,
-        ):
+            self.pretrain_model, T5ForConditionalGeneration):
             self.match_n_layer = self.config.num_decoder_layers
             self.match_n_head = self.config.num_heads
+        elif isinstance(self.pretrain_model, MT5ForConditionalGeneration):
+            self.match_n_layer = self.config.num_decoder_layers
+            self.match_n_head = self.config.num_heads
+            self.n_embd = self.config.d_model
+            self.match_n_embd = self.config.d_kv
         else:
             raise ValueError("Other models are not supported yet!")
 
@@ -236,7 +245,7 @@ class Model(PushToHubFriendlyModel):
                         ),
                         "control_trans": nn.Sequential(
                             nn.Linear(self.n_embd, self.mid_dim),
-                            nn.Tanh(),
+                            nn.ReLU(),
                             nn.Linear(
                                 self.mid_dim, self.match_n_layer * 2 * self.n_embd
                             ),
@@ -246,7 +255,7 @@ class Model(PushToHubFriendlyModel):
                         ),
                         "control_trans_enc": nn.Sequential(
                             nn.Linear(self.n_embd, self.mid_dim),
-                            nn.Tanh(),
+                            nn.ReLU(),
                             nn.Linear(
                                 self.mid_dim, self.match_n_layer * 2 * self.n_embd
                             ),
@@ -256,7 +265,7 @@ class Model(PushToHubFriendlyModel):
                         ),
                         "control_trans_dec": nn.Sequential(
                             nn.Linear(self.n_embd, self.mid_dim),
-                            nn.Tanh(),
+                            nn.ReLU(),
                             nn.Linear(
                                 self.mid_dim, self.match_n_layer * 2 * self.n_embd
                             ),
@@ -274,19 +283,19 @@ class Model(PushToHubFriendlyModel):
                 "wte": nn.Embedding(self.preseqlen, self.n_embd),
                 "control_trans": nn.Sequential(
                     nn.Linear(self.n_embd, self.mid_dim),
-                    nn.Tanh(),
+                    nn.ReLU(),
                     nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
                 ),
                 "wte_enc": nn.Embedding(self.preseqlen, self.n_embd),
                 "control_trans_enc": nn.Sequential(
                     nn.Linear(self.n_embd, self.mid_dim),
-                    nn.Tanh(),
+                    nn.ReLU(),
                     nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
                 ),
                 "wte_dec": nn.Embedding(self.preseqlen, self.n_embd),
                 "control_trans_dec": nn.Sequential(
                     nn.Linear(self.n_embd, self.mid_dim),
-                    nn.Tanh(),
+                    nn.ReLU(),
                     nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
                 ),
                 "dropout": nn.Dropout(args.prefix_tuning.prefix_dropout),

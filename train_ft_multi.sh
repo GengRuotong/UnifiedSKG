@@ -30,7 +30,7 @@ python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.p
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \
-    --learning_rate 1e-4 \
+    --learning_rate 1e-3 \
     --predict_with_generate \
     --overwrite_output_dir \
     --per_device_train_batch_size 8 \

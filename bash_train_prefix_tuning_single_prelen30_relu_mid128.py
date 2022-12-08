@@ -1,7 +1,8 @@
 # python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py
 import os
 
-domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai']
+domain_list = ['mt_maoyanyanchu']
+# domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai']
 input_folder = "data/sample_datas_wo_prefix/"
 output_folder = "output/T5_base_prefix_tuning_3domains_relu_mid128_prelen30/single_domain/"
 
@@ -13,7 +14,7 @@ export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_prefix_tuning_explore
 export WANDB_ENTITY=ruotonggeng
 
-CUDA_VISIBLE_DEVICES=1 python train.py \
+CUDA_VISIBLE_DEVICES=0 python train.py \
     --run_name %s \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm False \
@@ -43,7 +44,7 @@ CUDA_VISIBLE_DEVICES=1 python train.py \
     --learning_rate 1e-3 \
     --warmup_steps 500 \
     --overwrite_output_dir \
-    --per_device_train_batch_size 16 \
+    --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 32 \
     --generation_num_beams 1 \
     --generation_max_length 128 \
