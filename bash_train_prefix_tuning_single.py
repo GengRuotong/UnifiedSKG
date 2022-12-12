@@ -28,7 +28,7 @@ export WANDB_ENTITY=ruotonggeng
 CUDA_VISIBLE_DEVICES=1 python train.py \
     --run_name %s \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
-    --freeze_plm False \
+    --freeze_plm True \
     --domain_name %s \
     --data_folder_path %s \
     --output_dir %s \
