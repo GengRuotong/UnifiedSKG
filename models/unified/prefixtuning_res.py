@@ -8,7 +8,6 @@ from .tokenizer_chn import T5PegasusTokenizer
 from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
 
-
 class Model(PushToHubFriendlyModel):
     def __init__(self, args):
         super().__init__()
@@ -18,7 +17,6 @@ class Model(PushToHubFriendlyModel):
 
         self.preseqlen = args.prefix_tuning.prefix_sequence_length
         self.mid_dim = args.prefix_tuning.mid_dim
-        self.sub_task_args = args.arg_paths
 
         print("prefix-tuning sequence length is {}.".format(self.preseqlen))
 
@@ -39,8 +37,7 @@ class Model(PushToHubFriendlyModel):
         if isinstance(self.pretrain_model, BartForConditionalGeneration):
             self.match_n_layer = self.config.decoder_layers
             self.match_n_head = self.config.decoder_attention_heads
-            # self.n_embd = self.config.d_model
-            self.n_embd = 512
+            self.n_embd = self.config.d_model
             assert self.n_embd % self.match_n_head == 0
             self.match_n_embd = self.n_embd // self.match_n_head # huggingface BART's dim of kv need to be calculated
         elif isinstance(self.pretrain_model, (T5ForConditionalGeneration)):
@@ -64,13 +61,15 @@ class Model(PushToHubFriendlyModel):
         # Prefix related.
         # self.n_embd, self.mid_dim = 768, 512
         self.register_buffer('input_tokens', torch.arange(self.preseqlen).long())
-
+    
         self.wte = nn.Embedding(self.preseqlen, self.n_embd)
         self.control_trans = nn.Sequential(
             nn.Linear(self.n_embd, self.mid_dim),
             nn.ReLU(),
             nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
         )
+        self.norm = nn.LayerNorm(self.match_n_embd)
+        
         if self.args.model.knowledge_usage == 'separate':
             self.knowledge_trans = nn.Sequential(
                 nn.Linear(self.n_embd, self.mid_dim),
@@ -84,6 +83,8 @@ class Model(PushToHubFriendlyModel):
             nn.ReLU(),
             nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
         )
+        self.norm_enc = nn.LayerNorm(self.match_n_embd)
+        
         if self.args.model.knowledge_usage == 'separate':
             self.knowledge_trans_enc = nn.Sequential(
                 nn.Linear(self.n_embd, self.mid_dim),
@@ -97,6 +98,7 @@ class Model(PushToHubFriendlyModel):
             nn.ReLU(),
             nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
         )
+        self.norm_dec = nn.LayerNorm(self.match_n_embd)
 
         # Knowledge prompt.
         if self.args.model.knowledge_usage == 'separate':
@@ -141,17 +143,21 @@ class Model(PushToHubFriendlyModel):
         temp_control = self.wte(input_tokens)
         if description is not None:
             temp_control = temp_control + description.repeat_interleave(sample_size, dim=0).unsqueeze(1)
+
         past_key_values = self.control_trans(temp_control)  # bsz, seqlen, 2*layer*head*d_h
         
         if knowledge is not None:
             past_key_values = torch.cat([past_key_values, self.knowledge_trans(knowledge.repeat_interleave(sample_size, dim=0))], dim=1)
+
+        res_temp_control = torch.cat([temp_control] * (2*self.match_n_layer), dim=-1)
+        past_key_values += res_temp_control
         
         bsz, seqlen, _ = past_key_values.shape
-        
         past_key_values = past_key_values.view(
             bsz, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
         ) # bsz = 8, seqlen = 10, past_key_values.shape = torch.Size([8, 10, 24, 12, 64])
         past_key_values = self.dropout(past_key_values)
+        past_key_values = self.norm(past_key_values)
         # past_key_values.permute([2, 0, 3, 1, 4]).shape = ([24, 8, 12, 10, 64])
         # past_key_values.permute([2, 0, 3, 1, 4]).split(2) is a tuple, has 12 numbers, each of them has a size ([2, 8, 12, 10, 64])
         past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
@@ -166,11 +172,16 @@ class Model(PushToHubFriendlyModel):
         if knowledge is not None:
             past_key_values_dec = torch.cat([past_key_values_dec, self.knowledge_trans_dec(knowledge.repeat_interleave(sample_size, dim=0))], dim=1)
 
+        res_temp_control_dec = torch.cat([temp_control_dec] * (2*self.match_n_layer), dim=-1)
+        past_key_values_dec += res_temp_control_dec
+
         bsz, seqlen, _ = past_key_values_dec.shape
         past_key_values_dec = past_key_values_dec.view(
             bsz, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
         )
         past_key_values_dec = self.dropout(past_key_values_dec)
+        past_key_values_dec = self.norm_dec(past_key_values_dec)
+
         past_key_values_dec = past_key_values_dec.permute([2, 0, 3, 1, 4]).split(2)
 
         # Encoder prefix
@@ -185,7 +196,9 @@ class Model(PushToHubFriendlyModel):
         )  # bsz, seqlen, layer*emb
         if knowledge is not None:
             past_key_values_enc = torch.cat([past_key_values_enc, self.knowledge_trans_enc(knowledge)], dim=1)
-
+        
+        res_temp_control_enc = torch.cat([temp_control_enc] * (2*self.match_n_layer), dim=-1)
+        past_key_values_enc += res_temp_control_enc
         bsz_enc, seqlen, _ = past_key_values_enc.shape
         past_key_values_enc = past_key_values_enc.view(
             bsz_enc,
@@ -195,6 +208,7 @@ class Model(PushToHubFriendlyModel):
             self.match_n_embd,
         )
         past_key_values_enc = self.dropout(past_key_values_enc)
+        past_key_values_enc = self.norm_enc(past_key_values_enc)
         past_key_values_enc = past_key_values_enc.permute([2, 0, 3, 1, 4]).split(2)
 
         result = []

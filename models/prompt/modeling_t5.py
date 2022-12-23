@@ -225,7 +225,6 @@ DEPARALLELIZE_DOCSTRING = r"""
         model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
 """
 
-
 class T5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
