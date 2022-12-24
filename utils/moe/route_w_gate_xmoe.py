@@ -14,9 +14,9 @@ def balanced_assignment(input_feature, expert_feature, scores):
     solver = SinkhornSolver(L=scores)
     _, pi = solver.forward(input_feature, expert_feature)
 
-    expert_num = scores.shape[1]
+    token_num = scores.shape[0]
     # Tell other workers how many tokens to expect from us
-    return pi * expert_num
+    return pi * token_num
     
 # Assigns each token to the top k experts
 def greedy_assignment(scores, k=1):
@@ -69,6 +69,7 @@ def top1gating(
     # Compute locations in capacity buffer
     locations1 = fused_cumsum_sub_one(mask1)
     gates1_s = (gates * mask1).sum(dim=1)
+    gates1_s = gates1_s * 1.5
 
 
     # Compute l_aux
@@ -117,7 +118,7 @@ class Top1Gate(torch.nn.Module):
         num_experts: int,
         capacity_factor=1.0,
         moe_eval_capacity_token_fraction=EVAL_CAPACITY_TOKEN_FRACTION,
-        use_xmoe=False,
+        use_xmoe=True,
     ) -> None:
         # TODO: merge this to top2gate.py
         #
@@ -140,7 +141,7 @@ class Top1Gate(torch.nn.Module):
         is_training = input.requires_grad
         if self.use_xmoe:
             input = self.dim_reduction(input)
-            with torch.no_grad:
+            with torch.no_grad():
                 expert_centroids_norm = self.expert_centroids.norm(p=2.0, dim=1, keepdim=True)
                 self.expert_centroids.mul_(1.5 / expert_centroids_norm)
             logits = self._cosine(input, self.expert_centroids)

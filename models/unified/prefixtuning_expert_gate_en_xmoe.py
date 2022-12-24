@@ -187,6 +187,8 @@ class Model(PushToHubFriendlyModel):
             else:
                 base_layer_control_enc, l_aux_enc = self.base_layer_enc(temp_control_enc)
             past_key_values_enc = base_layer_control_enc
+        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2*self.match_n_layer)
+        past_key_values_enc += res_temp_control_enc
         
         bsz_enc, seqlen, _ = past_key_values_enc.shape
         past_key_values_enc = past_key_values_enc.view(
