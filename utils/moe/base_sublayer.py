@@ -15,6 +15,7 @@ class BaseSublayer(nn.Module):
         self.out_features = out_features
         self.ff1 = nn.Linear(self.in_features, self.mid_features)
         self.ff2 = nn.Linear(self.mid_features, self.out_features)
+        self.ff2.weight.data.zero_()
 
     def forward(self, x):
         if 'wo_share' in self.expert_struct:

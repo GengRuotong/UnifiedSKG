@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --run_name mt_multi_prefix_expert8_en_cross_res \
     --local_rank -1 \
     --seed 2 \
-    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_expert_en_cross_res.cfg \
+    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_expert_decoder_res.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
