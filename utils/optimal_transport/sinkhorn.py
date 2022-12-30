@@ -11,7 +11,7 @@ class SinkhornSolver(nn.Module):
         self.epsilon = epsilon
         self.iterations = iterations
         self.threshold = threshold
-        self.C_gpu = -L
+        self.C_gpu = L
         self.C = self.C_gpu.cpu()
 
 

@@ -7,7 +7,8 @@ from transformers import AutoTokenizer
 from .tokenizer_chn import T5PegasusTokenizer
 from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
-from utils.moe.base_layer import BaseLayer
+# from utils.moe.base_layer import BaseLayer
+from utils.moe.base_layer_w_xmoe import BaseLayer
 
 SUPPORT_PRETRAINED_MODEL = ['BartForConditionalGeneration', 'T5ForConditionalGeneration', 'MT5ForConditionalGeneration']
 
@@ -20,10 +21,13 @@ class Model(PushToHubFriendlyModel):
 
         self.preseqlen = args.prefix_tuning.prefix_sequence_length
         self.mid_dim = args.prefix_tuning.mid_dim
+        # expert
         self.expert_struct = args.expert.expert_struct
         self.moe_expert_count = args.expert.moe_expert_count
         self.num_base_layers = args.expert.num_base_layers
-        self.block_w_base = args.expert.block_w_base
+        # phm
+        self.phm_dim = args.model.phm_dim
+        self.factorized_phm = args.model.factorized_phm
        
         print("prefix-tuning sequence length is {}.".format(self.preseqlen))
 
@@ -68,29 +72,27 @@ class Model(PushToHubFriendlyModel):
         # Prefix related.
         # self.n_embd, self.mid_dim = 768, 512
         self.register_buffer('input_tokens', torch.arange(self.preseqlen).long())
+        self.num_up_layers = self.match_n_layer - self.num_base_layers
         # dec
         self.wte = nn.Embedding(self.preseqlen, self.n_embd)
-        if 'w_share' in self.expert_struct:
-            self.down_project = nn.Sequential(
-                nn.Linear(self.n_embd, self.mid_dim),
-                nn.ReLU()
-                )
+        
+        self.down_project = nn.Sequential(
+            nn.Linear(self.n_embd, self.mid_dim),
+            nn.ReLU()
+            )
+        if self.num_up_layers > 0:
+            self.up_project = nn.Linear(self.mid_dim, 2*self.num_up_layers*self.match_n_head*self.match_n_embd)
         if 'split_to_layers' in self.expert_struct:
-            self.base_layer = BaseLayer(
-                in_features=self.n_embd,
-                mid_features=self.mid_dim,
-                out_features=self.match_n_head * self.match_n_embd * 2 * self.num_base_layers,
-                moe_expert_count=self.moe_expert_count,
-                expert_struct=self.expert_struct
-                )
-            
-        elif 'per_layer' in self.expert_struct:
+            # out_features = out_features*2*base_layer_num
             self.base_layer = BaseLayer(
                 in_features=self.n_embd,
                 mid_features=self.mid_dim,
                 out_features=self.match_n_head * self.match_n_embd,
                 moe_expert_count=self.moe_expert_count,
-                expert_struct=self.expert_struct
+                base_layer_num=self.num_base_layers,
+                phm_dim=self.phm_dim,
+                expert_struct=self.expert_struct,
+                phm_expert=True
                 )
         else:
             raise ValueError("Other expert_structs are not supported yet!")
@@ -98,56 +100,20 @@ class Model(PushToHubFriendlyModel):
         
         # enc
         self.wte_enc = nn.Embedding(self.preseqlen, self.n_embd)
-        if 'w_share' in self.expert_struct:
-            self.down_project_enc = nn.Sequential(
-                nn.Linear(self.n_embd, self.mid_dim),
-                nn.ReLU()
-                )
-        if 'split_to_layers' in self.expert_struct:
-            self.base_layer_enc = BaseLayer(
-                in_features=self.n_embd,
-                mid_features=self.mid_dim,
-                out_features=self.match_n_head * self.match_n_embd * 2 * self.num_base_layers,
-                moe_expert_count=self.moe_expert_count,
-                expert_struct=self.expert_struct
-                )
-        elif 'per_layer' in self.expert_struct:
-            self.base_layer_enc = BaseLayer(
-                in_features=self.n_embd,
-                mid_features=self.mid_dim,
-                out_features=self.match_n_head * self.match_n_embd,
-                moe_expert_count=self.moe_expert_count,
-                expert_struct=self.expert_struct
-                )
-        else:
-            raise ValueError("Other expert_structs are not supported yet!")
+        self.control_trans_enc = nn.Sequential(
+            nn.Linear(self.n_embd, self.mid_dim),
+            nn.ReLU(),
+            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
+            )
         self.norm_enc = nn.LayerNorm(self.match_n_embd)
 
         # cross
         self.wte_dec = nn.Embedding(self.preseqlen, self.n_embd)
-        if 'w_share' in self.expert_struct:
-            self.down_project_dec = nn.Sequential(
-                nn.Linear(self.n_embd, self.mid_dim),
-                nn.ReLU()
-                )
-        if 'split_to_layers' in self.expert_struct:
-            self.base_layer_dec = BaseLayer(
-                in_features=self.n_embd,
-                mid_features=self.mid_dim,
-                out_features=self.match_n_head * self.match_n_embd * 2 * self.num_base_layers,
-                moe_expert_count=self.moe_expert_count,
-                expert_struct=self.expert_struct
-                )
-        elif 'per_layer' in self.expert_struct:
-            self.base_layer_dec = BaseLayer(
-                in_features=self.n_embd,
-                mid_features=self.mid_dim,
-                out_features=self.match_n_head * self.match_n_embd,
-                moe_expert_count=self.moe_expert_count,
-                expert_struct=self.expert_struct
-                )
-        else:
-            raise ValueError("Other expert_structs are not supported yet!")
+        self.control_trans_dec = nn.Sequential(
+            nn.Linear(self.n_embd, self.mid_dim),
+            nn.ReLU(),
+            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
+        )
         self.norm_dec = nn.LayerNorm(self.match_n_embd)
 
         self.dropout = nn.Dropout(args.prefix_tuning.prefix_dropout)
@@ -158,7 +124,7 @@ class Model(PushToHubFriendlyModel):
         
         if self.args.model.freeze_prefix:
             for name, module in self.named_modules():
-                if name not in SUPPORT_PRETRAINED_MODEL:
+                if 'pretrain' not in name:
                 # print(name)
                     for param in module.parameters():
                         param.requires_grad = False
@@ -171,24 +137,19 @@ class Model(PushToHubFriendlyModel):
         (batch_size, num_heads, sequence_length - 1, embed_size_per_head)) — Contains precomputed key and value hidden states 
         of the attention blocks. Can be used to speed up decoding.
         '''
+        balance_loss = 0.0
         # Decoder Prefix
         old_bsz = bsz
         bsz = bsz * sample_size
         input_tokens = self.input_tokens.unsqueeze(0).expand(bsz, -1) # bsz, seqlen
         temp_control = self.wte(input_tokens)
-        if 'w_share' in self.expert_struct:
-            down_control = self.down_project(temp_control)
-            if self.expert_struct == 'MLP_per_layer_w_share':
-                base_layer_control_per_layer, l_aux = self.base_layer(down_control)
-                base_layer_control = torch.cat([base_layer_control_per_layer for _ in range(2 * self.num_base_layers)], dim=-1)
-            else: 
-                base_layer_control, l_aux = self.base_layer(down_control) 
-            
-        elif self.expert_struct == 'MLP_per_layer_wo_share':
-            base_layer_control_per_layer, l_aux = self.base_layer(temp_control)
-            base_layer_control = torch.cat([base_layer_control_per_layer for _ in range(2 * self.num_base_layers)], dim=-1)
-        else:
-            base_layer_control, l_aux = self.base_layer(temp_control)
+        down_control = self.down_project(temp_control)
+        if self.expert_struct == 'MLP_split_to_layers_w_share':
+            base_layer_control, l_aux = self.base_layer(down_control) 
+            balance_loss += l_aux
+        if self.num_up_layers > 0:
+            up_control = self.up_project(down_control)
+            base_layer_control = torch.cat([up_control, base_layer_control], dim=-1)
         past_key_values = base_layer_control
         res_temp_control = temp_control.repeat(1, 1, 2 * self.match_n_layer)
         past_key_values += res_temp_control
@@ -203,20 +164,7 @@ class Model(PushToHubFriendlyModel):
 
         # Cross prefix
         temp_control_dec = self.wte_dec(input_tokens)
-        if 'w_share' in self.expert_struct:
-            down_control_dec = self.down_project(temp_control_dec)
-            if self.expert_struct == 'MLP_per_layer_w_share':
-                base_layer_control_per_layer, l_aux_dec = self.base_layer_dec(down_control_dec)
-                base_layer_control_dec = torch.cat([base_layer_control_per_layer for _ in range(2 * self.num_base_layers)], dim=-1)
-            else: 
-                base_layer_control_dec, l_aux_dec = self.base_layer_dec(down_control_dec) 
-            
-        elif self.expert_struct == 'MLP_per_layer_wo_share':
-            base_layer_control_per_layer, l_aux_dec = self.base_layer_dec(temp_control_dec)
-            base_layer_control_dec = torch.cat([base_layer_control_per_layer for _ in range(2 * self.num_base_layers)], dim=-1)
-        else:
-            base_layer_control_dec, l_aux_dec = self.base_layer_dec(temp_control_dec)
-        past_key_values_dec = base_layer_control_dec
+        past_key_values_dec = self.control_trans_dec(temp_control_dec)
         res_temp_control_dec = temp_control_dec.repeat(1, 1, 2*self.match_n_layer)
         past_key_values_dec += res_temp_control_dec
 
@@ -231,20 +179,7 @@ class Model(PushToHubFriendlyModel):
         # Encoder prefix
         input_tokens_enc = (self.input_tokens.unsqueeze(0).expand(old_bsz, -1))
         temp_control_enc = self.wte_enc(input_tokens_enc)
-        if 'w_share' in self.expert_struct:
-            down_control_enc = self.down_project(temp_control_enc)
-            if self.expert_struct == 'MLP_per_layer_w_share':
-                base_layer_control_per_layer, l_aux_enc = self.base_layer_enc(down_control_enc)
-                base_layer_control_enc = torch.cat([base_layer_control_per_layer for _ in range(2 * self.num_base_layers)], dim=-1)
-            else: 
-                base_layer_control_enc, l_aux_enc = self.base_layer_enc(down_control_enc) 
-            
-        elif self.expert_struct == 'MLP_per_layer_wo_share':
-            base_layer_control_per_layer, l_aux_enc = self.base_layer_enc(temp_control_enc)
-            base_layer_control_enc = torch.cat([base_layer_control_per_layer for _ in range(2 * self.num_base_layers)], dim=-1)
-        else:
-            base_layer_control_enc, l_aux_enc = self.base_layer_enc(temp_control_enc)
-        past_key_values_enc = base_layer_control_enc
+        past_key_values_enc = self.control_trans_enc(temp_control_enc)
         
         res_temp_control_enc = temp_control_enc.repeat(1, 1, 2*self.match_n_layer)
         past_key_values_enc += res_temp_control_enc
@@ -289,7 +224,7 @@ class Model(PushToHubFriendlyModel):
             }
             result.append(temp)
 
-        return result
+        return result, balance_loss
 
 
     def forward(self,
@@ -300,15 +235,16 @@ class Model(PushToHubFriendlyModel):
                 ):
         bsz = input_ids.shape[0]
 
-        past_prompt = self.get_prompt(bsz=bsz)
+        past_prompt, balance_loss = self.get_prompt(bsz=bsz)
 
-        loss = self.pretrain_model(
+        mle_loss = self.pretrain_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             labels=labels,
             past_prompt=past_prompt,
         ).loss
-        return {'loss': loss}
+        total_loss = mle_loss + 2*balance_loss
+        return {'loss': total_loss}
 
     def generate(self,
                  input_ids,
@@ -317,7 +253,7 @@ class Model(PushToHubFriendlyModel):
 
         bsz = input_ids.shape[0]
 
-        past_prompt = self.get_prompt(bsz=bsz, sample_size=kwargs['num_beams'])
+        past_prompt, _ = self.get_prompt(bsz=bsz, sample_size=kwargs['num_beams'])
         generated_ids = self.pretrain_model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -327,3 +263,5 @@ class Model(PushToHubFriendlyModel):
         )
 
         return generated_ids
+
+

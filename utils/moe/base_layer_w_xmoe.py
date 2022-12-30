@@ -5,50 +5,78 @@
 
 import logging
 import torch
-import time
-from typing import Any, Tuple, cast
 from torch import Tensor, nn
-from .base_sublayer import BaseSublayer
-from .route_w_gate_xmoe import Top1Gate
+from .base_sublayer import BaseSublayer, BasePhmSublayer
 
 fused_cumsum_sub_one = lambda mask: torch.cumsum(mask, dim=0) - 1
 
 logger = logging.getLogger(__name__)
 
+def get_phm_rule_expert(base_layer_num=12, 
+                        phm_dim=32,
+                        expert_struct: str='MLP_split_to_layers_w_share',
+                        strategy: str='plus'):
+    assert strategy in ['plus', 'concat']
+    if strategy == 'plus':
+        phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_dim, phm_dim))
+    else:
+        phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_dim, phm_dim // 2))
+    phm_rule_expert.data.zero_()
+    # phm_rule_expert.data.normal_(mean=0, std=0.0001)
+    if expert_struct == 'MLP_split_to_layers_w_share':
+        return phm_rule_expert
+    elif expert_struct == 'MLP_per_layer_w_share':
+        return phm_rule_expert.split(2*phm_dim*phm_dim)
+    else:
+        raise ValueError("Other gate_types are not supported yet!")
+
+
 
 class BaseLayer(nn.Module):
     def __init__(self, 
                  in_features: int,
-                 mid_features: int,
                  out_features: int,
                  base_shuffle=True,
                  moe_expert_count=4,
-                 expert_struct: str = 'MLP_split_to_layers_w_share',
+                 base_layer_num=1,
+                 phm_dim=32,
+                 gate=None,
+                 phm_expert: bool = False,
+                 phm_rule_expert = None,
+                 strategy: str='plus'
                  ):
         super().__init__()
         self.base_shuffle = base_shuffle
         self.in_features = in_features
-        self.mid_features = mid_features
-        self.out_features = out_features
+        self.base_layer_num = base_layer_num
+        self.phm_dim = phm_dim
         self.moe_expert_count = moe_expert_count
-        self.expert_struct = expert_struct
-        if 'wo_share' in self.expert_struct:
-            self.expert_dim = self.in_features
-        elif 'w_share' in self.expert_struct:
-            self.expert_dim = self.mid_features
-        self.gate = Top1Gate(model_dim=self.expert_dim, num_experts=moe_expert_count)
+        self.gate = gate
+        self.phm_expert = phm_expert
+        self.phm_rule_expert = phm_rule_expert
+        self.strategy = strategy
 
-        expert_network =[BaseSublayer(
-                        in_features=self.in_features,
-                        mid_features=self.mid_features,
-                        out_features=self.out_features,
-                        expert_struct= self.expert_struct
-                        ) for _ in range (self.moe_expert_count)]
+        # expert type, phm_expert only support MLP_split_to_layers
+        if self.phm_expert:
+            self.out_features = out_features // (2*self.base_layer_num)
+            expert_network =[BasePhmSublayer(
+                in_features=self.in_features,
+                out_features=self.out_features,
+                layer_num=self.base_layer_num,
+                phm_dim=self.phm_dim,
+                phm_rule_expert=self.phm_rule_expert,
+                strategy=self.strategy
+            ) for _ in range (self.moe_expert_count)]
+        else:
+            self.out_features = out_features
+            expert_network =[BaseSublayer(
+                            in_features=self.in_features,
+                            out_features=self.out_features,
+                            ) for _ in range (self.moe_expert_count)]
         self.experts = nn.ModuleList(expert_network) 
         # Add a special attribute to the expert parameters, so we know not to sync their gradients
         for param in self.experts.parameters():
             param.expert = True
-        self.num_local_experts = len(self.experts)
 
     def forward(self, hidden_states) -> Tensor:
         # 3d to 2d(t, model_dim)
@@ -61,7 +89,7 @@ class BaseLayer(nn.Module):
             # Send each token to a random worker, to break correlations within the batch
             shuffle_sort = torch.randperm(features.size(0), device=features.device)
             features = features[shuffle_sort]
-  
+        
         l_aux, combine_weights, dispatch_mask, self.metadata = self.gate(
             features, features_padding_mask
         )
@@ -78,12 +106,12 @@ class BaseLayer(nn.Module):
         # Re-shape after all-to-all: (e*c,m) -> ecm
         dispatched_features = dispatched_features.reshape(E, C, M)
         
-        chunks = dispatched_features.chunk(self.num_local_experts, dim=0)
+        chunks = dispatched_features.chunk(self.moe_expert_count, dim=0)
         expert_outputs = []
         for chunk, expert in zip(chunks, self.experts):
             expert_outputs += [expert(chunk)]
         expert_output = torch.cat(expert_outputs, dim=0)
-        
+
         # einsum("sec,ecm->sm")
         combined_output = combine_weights.view(S, E * C).mm(
             expert_output.view(E * C, -1)
@@ -100,3 +128,10 @@ class BaseLayer(nn.Module):
         return torch.empty_like(order).scatter_(
             0, order, torch.arange(0, order.size(0), device=order.device)
         )
+
+    def set_gate(self, gate=None):
+        self.gate = gate
+
+    def set_phm_rule_expert(self, phm_rule_expert=None, strategy:str='plus'):
+        self.phm_rule_expert = phm_rule_expert
+        self.strategy = strategy

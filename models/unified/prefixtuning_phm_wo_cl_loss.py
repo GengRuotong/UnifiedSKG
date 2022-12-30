@@ -7,7 +7,7 @@ from transformers import AutoTokenizer
 from .tokenizer_chn import T5PegasusTokenizer
 from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
-from ..hypercomplex.layers_wo_phm_list import PHMLinearBlock
+from ..hypercomplex.phm_layer import PHMLinearBlock
 
 
 class Model(PushToHubFriendlyModel):
