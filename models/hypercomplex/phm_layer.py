@@ -147,7 +147,8 @@ class PHMLinear(torch.nn.Module):
             W_right_para = self.W_right_para.reshape(2*self.layer_num*self.phm_dim, self.phm_rank, self._out_feats_per_axis)
             W = torch.matmul(W_left_para, W_right_para)
         else:
-            W = self.W_para
+            W_para = self.W_para.reshape(2*self.layer_num*self.phm_dim, self._in_feats_per_axis, self._out_feats_per_axis)
+            W = W_para
         phm_rule_share = self.phm_rule.reshape(2*self.phm_dim, self.phm_dim, -1)
         phm_rule_share = phm_rule_share.repeat(self.layer_num, 1, 1)
         if self.phm_rule_expert != None:
