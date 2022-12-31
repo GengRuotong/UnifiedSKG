@@ -110,7 +110,6 @@ class BaseLayer(nn.Module):
                     factorized_phm=self.factorized_phm,
                     phm_rank=self.phm_rank,
                     phm_rule_expert=self.phm_rule_expert,
-                    
                     strategy=self.strategy
                 ) for _ in range (self.moe_expert_count)]
         else:
