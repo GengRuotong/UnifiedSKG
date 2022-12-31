@@ -41,7 +41,7 @@ class PHMLinear(torch.nn.Module):
                  w_init: str = "glorot-uniform",
                  c_init: str = "normal",
                  phm_rule: Union[None, torch.Tensor] = None,
-                 shared_phm_rule: bool = True,
+                 phm_rule_expert = None,
                  factorized_phm: bool = True,
                  strategy: str = '',
                  phm_rank = 1,
@@ -58,9 +58,8 @@ class PHMLinear(torch.nn.Module):
         self._in_feats_per_axis = in_features // phm_dim
         self._out_feats_per_axis = out_features // phm_dim
         self.phm_rank = phm_rank
-        self.phm_rule = phm_rule
-        self.shared_phm_rule = shared_phm_rule
         self.phm_init_range = phm_init_range
+        self.phm_rule_expert = phm_rule_expert
         self.bias_flag = bias
         self.w_init = w_init
         self.c_init = c_init
@@ -79,11 +78,14 @@ class PHMLinear(torch.nn.Module):
             self.register_parameter('b', None)
             self.b = None
 
-        if self.shared_phm_rule:
+        if phm_rule == None:
+            # layer_num > 1 means shared, layer_num == 1 means not shared
             if self.strategy == 'concat':
                 self.phm_rule = nn.Parameter(torch.FloatTensor(2*self.phm_dim*self.phm_dim, self.phm_dim // 2))
             elif self.strategy == 'plus':
                 self.phm_rule = nn.Parameter(torch.FloatTensor(2*self.phm_dim*self.phm_dim, self.phm_dim))
+        else:
+            self.phm_rule = phm_rule
             
 
         self.reset_parameters()
@@ -135,12 +137,6 @@ class PHMLinear(torch.nn.Module):
 
         if self.bias_flag:
             self.b.data = torch.zeros_like(self.b.data)
-
-    def set_phm_rule(self, phm_rule=None, strategy: str=''):
-        """If factorized_phm_rules is set, phm_rule is a tuple, showing the left and right
-        phm rules, and if this is not set, this is showing  the phm_rule."""
-        self.phm_rule_expert = phm_rule 
-        self.strategy = strategy
     
     def get_phm_rule(self):
         return self.phm_rule

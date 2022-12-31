@@ -8,7 +8,7 @@ from .tokenizer_chn import T5PegasusTokenizer
 from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
 # from utils.moe.base_layer import BaseLayer
-from utils.moe.base_layer_w_xmoe import BaseLayer, get_phm_rule_expert
+from utils.moe.base_layer_w_xmoe import BaseLayer, get_phm_rule_expert, get_phm_rule_shared
 from utils.moe.route_w_gate_xmoe import get_gate_instance
 
 SUPPORT_PRETRAINED_MODEL = ['BartForConditionalGeneration', 'T5ForConditionalGeneration', 'MT5ForConditionalGeneration']
@@ -30,9 +30,11 @@ class Model(PushToHubFriendlyModel):
         self.block_w_base = args.expert.block_w_base
         self.phm_expert = args.expert.phm_expert
         self.use_xmoe = args.expert.use_xmoe
+        self.phm_rule_per_layer_share = args.expert.phm_rule_per_layer_share
         
         # phm
         self.phm_dim = args.model.phm_dim
+        self.phm_rank=args.model.phm_rank
         self.factorized_phm = args.model.factorized_phm
         self.strategy = args.model.strategy
         print(self.block_w_base, self.strategy)
@@ -98,11 +100,17 @@ class Model(PushToHubFriendlyModel):
             )
             self.phm_rule_expert = get_phm_rule_expert(
                 base_layer_num=self.num_base_layers,
-                phm_dim=self.phm_dim,
+                phm_dim=self.phm_dim, 
                 expert_struct=self.expert_struct,
                 strategy=self.strategy)
-            
-            # (MLP_split_to_layers_w_share, MLP_per_layer_w_share)
+
+            self.phm_rule_shared = get_phm_rule_shared(
+                phm_dim=self.phm_dim,
+                moe_expert_count=self.moe_expert_count,
+                expert_struct=self.expert_struct,
+                phm_rule_per_layer_share=self.phm_rule_per_layer_share,
+                strategy=self.strategy
+            )
             if self.num_up_layers > 0:
                 self.up_project = nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd)
             if self.expert_struct == 'MLP_split_to_layers_w_share':
@@ -114,15 +122,28 @@ class Model(PushToHubFriendlyModel):
                     base_layer_num=self.num_base_layers,
                     phm_expert=self.phm_expert,
                     phm_rule_expert=self.phm_rule_expert,
+                    factorized_phm=self.factorized_phm,
+                    phm_rank=self.phm_rank,
                     strategy=self.strategy
                     )
             elif self.expert_struct == 'MLP_per_layer_w_share':
-                self.base_layer = BaseLayer(
-                    in_features=self.mid_dim,
-                    out_features=2 * self.match_n_head * self.match_n_embd,
-                    moe_expert_count=self.moe_expert_count,
-                    phm_expert=self.phm_expert,
-                    )
+                
+                base_layer_net = [
+                    BaseLayer(
+                                in_features=self.mid_dim,
+                                out_features=2 * self.match_n_head * self.match_n_embd,
+                                moe_expert_count=self.moe_expert_count,
+                                gate=self.gate[i],
+                                phm_expert=self.phm_expert,
+                                phm_rule_expert=self.phm_rule_expert[i],
+                                base_layer_num=1,
+                                phm_rule_shared=self.phm_rule_shared,
+                                factorized_phm=self.factorized_phm,
+                                phm_rank=self.phm_rank,
+                                strategy=self.strategy
+                            ) for i in range(self.num_base_layers)]
+                
+                self.base_layer_net = nn.ModuleList(base_layer_net)
             else:
                 raise ValueError("Other expert_structs are not supported yet!")
         else:
@@ -151,7 +172,16 @@ class Model(PushToHubFriendlyModel):
             self.phm_rule_expert_enc = get_phm_rule_expert(
                 base_layer_num=self.num_base_layers,
                 phm_dim=self.phm_dim, 
+                expert_struct=self.expert_struct,
                 strategy=self.strategy)
+
+            self.phm_rule_shared_enc = get_phm_rule_shared(
+                phm_dim=self.phm_dim,
+                moe_expert_count=self.moe_expert_count,
+                expert_struct=self.expert_struct,
+                phm_rule_per_layer_share=self.phm_rule_per_layer_share,
+                strategy=self.strategy
+            )
             if self.num_up_layers > 0:
                 self.up_project_enc = nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd)
             if self.expert_struct == 'MLP_split_to_layers_w_share':
@@ -163,15 +193,28 @@ class Model(PushToHubFriendlyModel):
                     base_layer_num=self.num_base_layers,
                     phm_expert=self.phm_expert,
                     phm_rule_expert=self.phm_rule_expert_enc,
+                    factorized_phm=self.factorized_phm,
+                    phm_rank=self.phm_rank,
                     strategy=self.strategy
                     )
             elif self.expert_struct == 'MLP_per_layer_w_share':
-                self.base_layer_enc = BaseLayer(
-                    in_features=self.mid_dim,
-                    out_features=2 * self.match_n_head * self.match_n_embd,
-                    moe_expert_count=self.moe_expert_count,
-                    phm_expert=self.phm_expert,
-                    )
+                
+                base_layer_net_enc = [
+                    BaseLayer(
+                                in_features=self.mid_dim,
+                                out_features=2 * self.match_n_head * self.match_n_embd,
+                                moe_expert_count=self.moe_expert_count,
+                                gate=self.gate_enc[i],
+                                phm_expert=self.phm_expert,
+                                phm_rule_expert=self.phm_rule_expert_enc[i],
+                                base_layer_num=1,
+                                phm_rule_shared=self.phm_rule_shared_enc,
+                                factorized_phm=self.factorized_phm,
+                                phm_rank=self.phm_rank,
+                                strategy=self.strategy
+                            ) for i in range(self.num_base_layers)]
+                
+                self.base_layer_net_enc = nn.ModuleList(base_layer_net_enc)
             else:
                 raise ValueError("Other expert_structs are not supported yet!")
         else:
@@ -197,10 +240,20 @@ class Model(PushToHubFriendlyModel):
                 base_layer_num=self.num_base_layers, 
                 use_xmoe=self.use_xmoe
             )
+
             self.phm_rule_expert_dec = get_phm_rule_expert(
                 base_layer_num=self.num_base_layers,
-                phm_dim=self.phm_dim,
+                phm_dim=self.phm_dim, 
+                expert_struct=self.expert_struct,
                 strategy=self.strategy)
+
+            self.phm_rule_shared_dec = get_phm_rule_shared(
+                phm_dim=self.phm_dim,
+                moe_expert_count=self.moe_expert_count,
+                expert_struct=self.expert_struct,
+                phm_rule_per_layer_share=self.phm_rule_per_layer_share,
+                strategy=self.strategy
+            )
             if self.num_up_layers > 0:
                 self.up_project_dec = nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd)
             if self.expert_struct == 'MLP_split_to_layers_w_share':
@@ -212,15 +265,28 @@ class Model(PushToHubFriendlyModel):
                     base_layer_num=self.num_base_layers,
                     phm_expert=self.phm_expert,
                     phm_rule_expert=self.phm_rule_expert_dec,
+                    factorized_phm=self.factorized_phm,
+                    phm_rank=self.phm_rank,
                     strategy=self.strategy
                     )
             elif self.expert_struct == 'MLP_per_layer_w_share':
-                self.base_layer_dec = BaseLayer(
-                    in_features=self.mid_dim,
-                    out_features=2 * self.match_n_head * self.match_n_embd,
-                    moe_expert_count=self.moe_expert_count,
-                    phm_expert=self.phm_expert,
-                    )
+                
+                base_layer_net_dec = [
+                    BaseLayer(
+                                in_features=self.mid_dim,
+                                out_features=2 * self.match_n_head * self.match_n_embd,
+                                moe_expert_count=self.moe_expert_count,
+                                gate=self.gate_dec[i],
+                                phm_expert=self.phm_expert,
+                                phm_rule_expert=self.phm_rule_expert_dec[i],
+                                base_layer_num=1,
+                                phm_rule_shared=self.phm_rule_shared_dec,
+                                factorized_phm=self.factorized_phm,
+                                phm_rank=self.phm_rank,
+                                strategy=self.strategy
+                            ) for i in range(self.num_base_layers)]
+                
+                self.base_layer_net_dec = nn.ModuleList(base_layer_net_dec)
             else:
                 raise ValueError("Other expert_structs are not supported yet!")
         else:
@@ -262,11 +328,9 @@ class Model(PushToHubFriendlyModel):
             down_control = self.down_project(temp_control)
             if self.expert_struct == 'MLP_per_layer_w_share':
                 # phm_rules are not shared between layers
-                base_layer_control_list = [self.up_project(down_control)]
+                base_layer_control_list = []
                 for i in range(self.num_base_layers):
-                    self.base_layer.set_gate(self.gate[i])
-                    self.base_layer.set_phm_rule_expert(self.phm_rule_expert[i], strategy=self.strategy)
-                    base_layer_control_per_layer, l_aux = self.base_layer(down_control)
+                    base_layer_control_per_layer, l_aux = self.base_layer_net[i](down_control)
                     balance_loss += l_aux
                     base_layer_control_list.append(base_layer_control_per_layer)
                 base_layer_control = torch.cat(base_layer_control_list, dim=-1)
@@ -295,11 +359,9 @@ class Model(PushToHubFriendlyModel):
         if 'cross' in self.block_w_base:
             down_control_dec = self.down_project_dec(temp_control_dec)
             if self.expert_struct == 'MLP_per_layer_w_share':
-                base_layer_control_list = [self.up_project_dec(down_control_dec)]
+                base_layer_control_list = []
                 for i in range(self.num_base_layers):
-                    self.base_layer_dec.set_gate(self.gate_dec[i])
-                    self.base_layer_dec.set_phm_rule_expert(self.phm_rule_expert_dec[i], strategy=self.strategy)
-                    base_layer_control_per_layer, l_aux_dec = self.base_layer_dec(down_control_dec)
+                    base_layer_control_per_layer, l_aux_dec = self.base_layer_net_dec[i](down_control_dec)
                     balance_loss += l_aux_dec
                     base_layer_control_list.append(base_layer_control_per_layer)
                 base_layer_control_dec = torch.cat(base_layer_control_list, dim=-1)
@@ -329,11 +391,9 @@ class Model(PushToHubFriendlyModel):
         if 'encoder' in self.block_w_base:
             down_control_enc = self.down_project_enc(temp_control_enc)
             if self.expert_struct == 'MLP_per_layer_w_share':
-                base_layer_control_list = [self.up_project_enc(down_control_enc)]
+                base_layer_control_list = []
                 for i in range(self.num_base_layers):
-                    self.base_layer_enc.set_gate(self.gate_enc[i])
-                    self.base_layer_enc.set_phm_rule_expert(self.phm_rule_expert_enc[i], strategy=self.strategy)
-                    base_layer_control_per_layer, l_aux_enc = self.base_layer_enc(down_control_enc)
+                    base_layer_control_per_layer, l_aux_enc = self.base_layer_net_enc[i](down_control_enc)
                     balance_loss += l_aux_enc
                     base_layer_control_list.append(base_layer_control_per_layer)
                 base_layer_control_enc = torch.cat(base_layer_control_list, dim=-1)

@@ -70,14 +70,14 @@ def top1gating(
 ) -> Tuple[Tensor, Tensor, Tensor, Dict]:
     """Implements Top2Gating on logits."""
     metadata = {}
-    
+    '''
     if not eval_mode:
         gates = balanced_assignment(input_feature, expert_feature, logits)
     else:
         gates = greedy_assignment(logits)
     '''
     gates = greedy_assignment(logits)
-    '''
+    
     # gates has shape of SE
     num_tokens = gates.shape[0]
     num_experts = gates.shape[1]
@@ -110,7 +110,7 @@ def top1gating(
 
 
     # Compute l_aux
-    
+    '''
     if not eval_mode:
         origin_gates = greedy_assignment(logits)
         me = torch.mean(origin_gates, dim=0)
@@ -118,7 +118,7 @@ def top1gating(
         me = torch.mean(gates, dim=0)
     '''
     me = torch.mean(gates, dim=0)
-    '''
+    
     ce = torch.mean(mask1.to(gates.dtype), dim=0)
     l_aux = torch.mean(me * ce)
     l_aux = l_aux * num_experts * num_experts
