@@ -23,18 +23,15 @@ def get_phm_rule_expert(base_layer_num=12,
             phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_dim, phm_dim))
         else:
             phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_dim, phm_dim // 2))
-        phm_rule_expert.data.zero_()
+        phm_rule_expert.data.normal_(mean=0, std=0.0001)
         return phm_rule_expert
     elif expert_struct == 'MLP_per_layer_w_share':
-        phm_rule_expert = []
         if strategy == 'plus':
-            for _ in range(base_layer_num):
-                phm_rule_expert.append(nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim)))
+            phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim)) for _ in range(base_layer_num)]
         else:
-            for _ in range(base_layer_num):
-                phm_rule_expert.append(nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim // 2)))
+            phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim // 2)) for _ in range(base_layer_num)]
         for item in phm_rule_expert:
-            item.data.zero_()
+            item.data.normal_(mean=0, std=0.0001)
         return phm_rule_expert
     else:
         raise ValueError("Other gate_types are not supported yet!")

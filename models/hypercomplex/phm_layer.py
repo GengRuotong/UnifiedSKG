@@ -91,7 +91,6 @@ class PHMLinear(torch.nn.Module):
         self.reset_parameters()
 
     def init_W(self):
-        '''
         if self.w_init == "glorot-normal":
             if self.factorized_phm:
                 self.W_left_para.data = glorot_normal(self.W_left_para.data)
@@ -118,18 +117,17 @@ class PHMLinear(torch.nn.Module):
             self.W_right_para.data.zero_()
         else:
             self.W_para.data.zero_()
-
+        '''
 
     def init_phm_rule(self):
-        '''
         if self.c_init == "normal":
             self.phm_rule.data.normal_(mean=0, std=self.phm_init_range)
         elif self.c_init == "uniform":
             self.phm_rule.data.uniform_(-1, 1)
         else:
             raise NotImplementedError
-        '''
-        self.phm_rule.data.zero_()
+
+        # self.phm_rule.data.zero_()
 
     def reset_parameters(self):
         self.init_W()
