@@ -15,17 +15,22 @@ logger = logging.getLogger(__name__)
 def get_phm_rule_expert(base_layer_num=12, 
                         phm_dim=32,
                         expert_struct: str='MLP_split_to_layers_w_share',
-                        strategy: str='plus'):
-    assert strategy in ['plus', 'concat']
+                        strategy: str='plus',
+                        phm_rank=1):
+    assert strategy in ['plus', 'concat', 'mat']
     # phm_rule_expert.data.normal_(mean=0, std=0.0001)
     if expert_struct == 'MLP_split_to_layers_w_share':
-        if strategy == 'plus':
+        if strategy == 'mat':
+            phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_rank, phm_dim))
+        elif strategy == 'plus':
             phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_dim, phm_dim))
         else:
             phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_dim, phm_dim // 2))
         phm_rule_expert.data.normal_(mean=0, std=0.0001)
         return phm_rule_expert
     elif expert_struct == 'MLP_per_layer_w_share':
+        if strategy == 'mat':
+            phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_rank, phm_dim)) for _ in range(base_layer_num)]
         if strategy == 'plus':
             phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim)) for _ in range(base_layer_num)]
         else:
@@ -42,11 +47,11 @@ def get_phm_rule_shared(
                         phm_rule_per_layer_share: bool=False,
                         moe_expert_count=8,
                         strategy: str='plus'):
-    assert strategy in ['plus', 'concat']
+    assert strategy in ['plus', 'concat','mat']
     assert expert_struct in ['MLP_per_layer_w_share', 'MLP_split_to_layers_w_share'] 
     if expert_struct == 'MLP_per_layer_w_share' and phm_rule_per_layer_share:
         phm_rule_shared = []
-        if strategy == 'plus':
+        if strategy == 'plus' or strategy == 'mat':
             for _ in range(moe_expert_count):
                 phm_rule_shared.append(nn.Parameter(torch.FloatTensor(2*phm_dim*phm_dim, phm_dim)))
         else:
@@ -110,6 +115,7 @@ class BaseLayer(nn.Module):
                     factorized_phm=self.factorized_phm,
                     phm_rank=self.phm_rank,
                     phm_rule_expert=self.phm_rule_expert,
+                    
                     strategy=self.strategy
                 ) for _ in range (self.moe_expert_count)]
         else:
