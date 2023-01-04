@@ -155,8 +155,12 @@ class PHMLinear(torch.nn.Module):
         
         if self.phm_rule_expert != None:
             if self.strategy == 'mat':
+             
+             
                 phm_rule_expert = self.phm_rule_expert.reshape(2*self.layer_num*self.phm_dim, self.phm_rank, self.phm_dim)
+                
                 phm_rule_share = torch.matmul(phm_rule_share, phm_rule_expert)
+            
       
             if self.strategy == 'plus':
                 phm_rule_expert = self.phm_rule_expert.reshape(2*self.layer_num*self.phm_dim, self.phm_dim, self.phm_dim)
