@@ -86,10 +86,13 @@ class Model(PushToHubFriendlyModel):
         # dec
         self.wte = nn.Embedding(self.preseqlen, self.n_embd)
         if 'decoder' in self.block_w_base:
+            self.down_project = nn.Linear(self.n_embd, self.mid_dim)
+            '''
             self.down_project = nn.Sequential(
                 nn.Linear(self.n_embd, self.mid_dim),
                 nn.ReLU()
                 )
+            '''
             self.gate = get_gate_instance(
                 model_dim=self.mid_dim,
                 num_expert=self.moe_expert_count,
@@ -112,7 +115,11 @@ class Model(PushToHubFriendlyModel):
                 strategy=self.strategy
             )
             if self.num_up_layers > 0:
-                self.up_project = nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd)
+                # self.up_project = nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd)
+                self.up_project = nn.Sequential(
+                    nn.ReLU(),
+                    nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd),
+                )
             if self.expert_struct == 'MLP_split_to_layers_w_share':
                 self.base_layer = BaseLayer(
                     in_features=self.mid_dim,

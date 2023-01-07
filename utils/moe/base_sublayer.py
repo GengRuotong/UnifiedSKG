@@ -9,11 +9,12 @@ class BaseSublayer(nn.Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
+        self.activate = nn.ReLU()
         self.ff2 = nn.Linear(self.in_features, self.out_features)
         self.ff2.weight.data.zero_()
 
     def forward(self, x):
-        return self.ff2(x)
+        return self.ff2(self.activate(x))
         
 
 class BasePhmSublayer(nn.Module):
@@ -38,6 +39,7 @@ class BasePhmSublayer(nn.Module):
         self.factorized_phm = factorized_phm
         self.phm_rank = phm_rank
         self.strategy = strategy
+        self.activate = nn.ReLU()
         self.ff2 = PHMLinear(
                              in_features=self.in_features,
                              out_features=self.out_features,
@@ -51,5 +53,5 @@ class BasePhmSublayer(nn.Module):
                             )
 
     def forward(self, x):
-        return self.ff2(x)
+        return self.ff2(self.activate(x))
         
