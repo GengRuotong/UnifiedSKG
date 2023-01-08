@@ -392,8 +392,8 @@ class Model(PushToHubFriendlyModel):
         past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
 
         # Cross prefix
+        temp_control_dec = self.wte_dec(input_tokens)
         if 'cross' in self.block_w_base:
-            temp_control_dec = self.wte_dec(input_tokens)
             if self.expert_struct == 'MLP_per_layer_w_share':
                 base_layer_control_list = []
                 for i in range(self.num_base_layers):
