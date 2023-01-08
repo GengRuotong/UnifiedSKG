@@ -171,20 +171,168 @@ class Model(PushToHubFriendlyModel):
         
         # enc
         self.wte_enc = nn.Embedding(self.preseqlen, self.n_embd)
-        self.control_trans_enc = nn.Sequential(
-            nn.Linear(self.n_embd, self.mid_dim),
-            nn.ReLU(),
-            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
-        )
+        if 'encoder' in self.block_w_base:
+            self.gate_enc = get_gate_instance(
+                model_dim=self.n_embd,
+                num_expert=self.moe_expert_count,
+                gate_type='Top2Gate',
+                expert_struct=self.expert_struct,
+                base_layer_num=self.num_base_layers,
+                use_xmoe=self.use_xmoe
+            )
+
+            self.phm_rule_expert_down_enc = get_phm_rule_expert(
+                base_layer_num=1,
+                phm_dim=self.phm_dim, 
+                expert_struct=self.expert_struct,
+                strategy=self.strategy,
+                share_kv=self.share_kv)
+
+            self.phm_rule_expert_up_enc = get_phm_rule_expert(
+                base_layer_num=self.num_base_layers,
+                phm_dim=self.phm_dim, 
+                expert_struct=self.expert_struct,
+                strategy=self.strategy)
+
+            self.phm_rule_shared_enc = get_phm_rule_shared(
+                phm_dim=self.phm_dim,
+                moe_expert_count=self.moe_expert_count,
+                expert_struct=self.expert_struct,
+                phm_rule_per_layer_share=self.phm_rule_per_layer_share,
+                strategy=self.strategy
+            )
+            if self.num_up_layers > 0:
+                self.up_project_enc = nn.Sequential(
+                    nn.Linear(self.n_embd, self.mid_dim),
+                    nn.ReLU(),
+                    nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd),
+                )
+            if self.expert_struct == 'MLP_split_to_layers_w_share':
+                self.base_layer_enc = BaseLayer(
+                    in_features=self.n_embd,
+                    mid_features=self.mid_dim,
+                    out_features=self.match_n_head * self.match_n_embd * 2 * self.num_base_layers,
+                    moe_expert_count=self.moe_expert_count,
+                    gate=self.gate_enc,
+                    base_layer_num=self.num_base_layers,
+                    phm_expert=self.phm_expert,
+                    phm_rule_expert_down=self.phm_rule_expert_down_enc,
+                    phm_rule_expert_up=self.phm_rule_expert_up_enc,
+                    factorized_phm=self.factorized_phm,
+                    phm_rank=self.phm_rank,
+                    strategy=self.strategy,
+                    share_kv=self.share_kv
+                    )
+            elif self.expert_struct == 'MLP_per_layer_w_share':
+                
+                base_layer_net_enc = [
+                    BaseLayer(
+                                in_features=self.n_embd,
+                                mid_features=self.mid_dim,
+                                out_features=2 * self.match_n_head * self.match_n_embd,
+                                moe_expert_count=self.moe_expert_count,
+                                gate=self.gate_enc[i],
+                                phm_expert=self.phm_expert,
+                                phm_rule_expert_down=self.phm_rule_expert_down_enc[i],
+                                phm_rule_expert_up=self.phm_rule_expert_up_enc[i],
+                                base_layer_num=1,
+                                phm_rule_shared=self.phm_rule_shared,
+                                factorized_phm=self.factorized_phm,
+                                phm_rank=self.phm_rank,
+                                strategy=self.strategy,
+                                share_kv=self.share_kv
+                            ) for i in range(self.num_base_layers)]
+                
+                self.base_layer_net_enc = nn.ModuleList(base_layer_net_enc)
+            else:
+                raise ValueError("Other expert_structs are not supported yet!")
+        else:
+            self.control_trans_enc = nn.Sequential(
+                nn.Linear(self.n_embd, self.mid_dim),
+                nn.ReLU(),
+                nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
+            )
         self.norm_enc = nn.LayerNorm(self.match_n_embd)
 
         # cross
         self.wte_dec = nn.Embedding(self.preseqlen, self.n_embd)
-        self.control_trans_dec = nn.Sequential(
-            nn.Linear(self.n_embd, self.mid_dim),
-            nn.ReLU(),
-            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
-        )
+        if 'cross' in self.block_w_base:
+            self.gate_dec = get_gate_instance(
+                model_dim=self.n_embd,
+                num_expert=self.moe_expert_count,
+                gate_type='Top2Gate',
+                expert_struct=self.expert_struct,
+                base_layer_num=self.num_base_layers,
+                use_xmoe=self.use_xmoe
+            )
+
+            self.phm_rule_expert_down_dec = get_phm_rule_expert(
+                base_layer_num=1,
+                phm_dim=self.phm_dim, 
+                expert_struct=self.expert_struct,
+                strategy=self.strategy,
+                share_kv=self.share_kv)
+
+            self.phm_rule_expert_up_dec = get_phm_rule_expert(
+                base_layer_num=self.num_base_layers,
+                phm_dim=self.phm_dim, 
+                expert_struct=self.expert_struct,
+                strategy=self.strategy)
+
+            self.phm_rule_shared_dec = get_phm_rule_shared(
+                phm_dim=self.phm_dim,
+                moe_expert_count=self.moe_expert_count,
+                expert_struct=self.expert_struct,
+                phm_rule_per_layer_share=self.phm_rule_per_layer_share,
+                strategy=self.strategy
+            )
+            if self.num_up_layers > 0:
+                self.up_project_dec = nn.Sequential(
+                    nn.Linear(self.n_embd, self.mid_dim),
+                    nn.ReLU(),
+                    nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd),
+                )
+            if self.expert_struct == 'MLP_split_to_layers_w_share':
+                self.base_layer_dec = BaseLayer(
+                    in_features=self.n_embd,
+                    mid_features=self.mid_dim,
+                    out_features=self.match_n_head * self.match_n_embd * 2 * self.num_base_layers,
+                    moe_expert_count=self.moe_expert_count,
+                    gate=self.gate_dec,
+                    base_layer_num=self.num_base_layers,
+                    phm_expert=self.phm_expert,
+                    phm_rule_expert_down=self.phm_rule_expert_down_dec,
+                    phm_rule_expert_up=self.phm_rule_expert_up_dec,
+                    factorized_phm=self.factorized_phm,
+                    phm_rank=self.phm_rank,
+                    strategy=self.strategy,
+                    share_kv=self.share_kv
+                    )
+            elif self.expert_struct == 'MLP_per_layer_w_share':
+                base_layer_net_dec = [
+                    BaseLayer(
+                                in_features=self.n_embd,
+                                mid_features=self.mid_dim,
+                                out_features=2 * self.match_n_head * self.match_n_embd,
+                                moe_expert_count=self.moe_expert_count,
+                                gate=self.gate_dec[i],
+                                phm_expert=self.phm_expert,
+                                phm_rule_expert_down=self.phm_rule_expert_down_dec[i],
+                                phm_rule_expert_up=self.phm_rule_expert_up_dec[i],
+                                base_layer_num=1,
+                                phm_rule_shared=self.phm_rule_shared,
+                                factorized_phm=self.factorized_phm,
+                                phm_rank=self.phm_rank,
+                                strategy=self.strategy,
+                                share_kv=self.share_kv
+                            ) for i in range(self.num_base_layers)]
+                self.base_layer_net_dec = nn.ModuleList(base_layer_net_dec)
+        else:
+            self.control_trans_dec = nn.Sequential(
+                nn.Linear(self.n_embd, self.mid_dim),
+                nn.ReLU(),
+                nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
+            )
         self.norm_dec = nn.LayerNorm(self.match_n_embd)
 
         self.dropout = nn.Dropout(args.prefix_tuning.prefix_dropout)
@@ -244,8 +392,24 @@ class Model(PushToHubFriendlyModel):
         past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
 
         # Cross prefix
-        temp_control_dec = self.wte_dec(input_tokens)
-        past_key_values_dec = self.control_trans_dec(temp_control_dec)
+        if 'cross' in self.block_w_base:
+            temp_control_dec = self.wte_dec(input_tokens)
+            if self.expert_struct == 'MLP_per_layer_w_share':
+                base_layer_control_list = []
+                for i in range(self.num_base_layers):
+                    base_layer_control_per_layer, l_aux_dec = self.base_layer_net_dec[i](temp_control_dec)
+                    balance_loss += l_aux_dec
+                    base_layer_control_list.append(base_layer_control_per_layer)
+                base_layer_control_dec = torch.cat(base_layer_control_list, dim=-1)
+            elif self.expert_struct == 'MLP_split_to_layers_w_share': 
+                base_layer_control_dec, l_aux_dec = self.base_layer_dec(temp_control_dec) 
+                balance_loss += l_aux_dec
+            if self.num_up_layers > 0:
+                up_control_dec = self.up_project_dec(temp_control_dec)
+                base_layer_control_dec = torch.cat([up_control_dec, base_layer_control_dec], dim=-1)
+            past_key_values_dec = base_layer_control_dec
+        else:
+            past_key_values_dec = self.control_trans_dec(temp_control_dec)
         res_temp_control_dec = temp_control_dec.repeat(1, 1, 2*self.match_n_layer)
         past_key_values_dec += res_temp_control_dec
 
@@ -260,8 +424,23 @@ class Model(PushToHubFriendlyModel):
         # Encoder prefix
         input_tokens_enc = (self.input_tokens.unsqueeze(0).expand(old_bsz, -1))
         temp_control_enc = self.wte_enc(input_tokens_enc)
-        past_key_values_enc = self.control_trans_enc(temp_control_enc)
-        
+        if 'encoder' in self.block_w_base:
+            if self.expert_struct == 'MLP_per_layer_w_share':
+                base_layer_control_list = []
+                for i in range(self.num_base_layers):
+                    base_layer_control_per_layer, l_aux_enc = self.base_layer_net_enc[i](temp_control_enc)
+                    balance_loss += l_aux_enc
+                    base_layer_control_list.append(base_layer_control_per_layer)
+                base_layer_control_enc = torch.cat(base_layer_control_list, dim=-1)
+            elif self.expert_struct == 'MLP_split_to_layers_w_share': 
+                base_layer_control_enc, l_aux_enc = self.base_layer_enc(temp_control_enc) 
+                balance_loss += l_aux_enc
+            if self.num_up_layers > 0:
+                up_control_enc = self.up_project_enc(temp_control_enc)
+                base_layer_control_enc = torch.cat([up_control_enc, base_layer_control_enc], dim=-1)
+            past_key_values_enc = base_layer_control_enc
+        else:
+            past_key_values_enc = self.control_trans_enc(temp_control_enc)
         res_temp_control_enc = temp_control_enc.repeat(1, 1, 2*self.match_n_layer)
         past_key_values_enc += res_temp_control_enc
         bsz_enc, seqlen, _ = past_key_values_enc.shape

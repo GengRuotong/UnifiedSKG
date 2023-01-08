@@ -5,14 +5,14 @@ export WANDB_PROJECT=T5_base_prefix_tuning_explore
 export WANDB_ENTITY=ruotonggeng
 
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 train.py \
-    --run_name mt_multi_prefix_phm_expert8_de_split_xmoe_mat12_phm32_wo_share_down \
+    --run_name mt_multi_prefix_phm_expert8_de_split_xmoe_mat12_phm32_wo_share_down_all \
     --local_rank -1 \
     --seed 3407 \
-    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_res_expert_wo_share_down.cfg \
+    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_res_expert_wo_share_down_all.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
-    --output_dir output/T5_base_prefix_tuning/multi_domain_prefix_phm_expert8_de_split_xmoe_mat12_wo_share_down \
+    --output_dir output/T5_base_prefix_tuning/multi_domain_prefix_phm_expert8_de_split_xmoe_mat12_wo_share_down_all \
     --do_train \
     --do_eval \
     --do_predict \
@@ -34,7 +34,6 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --adafactor true \
     --learning_rate 1e-3 \
     --lr_scheduler_type cosine_with_restarts \
-    --weight_decay 1e-5 \
     --per_device_train_batch_size 4 \
     --per_device_eval_batch_size 16 \
     --generation_num_beams 1 \
