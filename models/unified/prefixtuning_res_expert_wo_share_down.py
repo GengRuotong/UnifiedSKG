@@ -90,7 +90,7 @@ class Model(PushToHubFriendlyModel):
             self.gate = get_gate_instance(
                 model_dim=self.n_embd,
                 num_expert=self.moe_expert_count,
-                gate_type='Top1Gate',
+                gate_type='Top2Gate',
                 expert_struct=self.expert_struct,
                 base_layer_num=self.num_base_layers,
                 use_xmoe=self.use_xmoe
