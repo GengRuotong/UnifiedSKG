@@ -44,6 +44,7 @@ class PHMLinear(torch.nn.Module):
                  factorized_phm: bool = True,
                  phm_rule_expert = None,
                  strategy: str = '',
+                 share_kv: bool=False,
                  phm_rank = 1,
                  phm_init_range=0.0001,
                  ) -> None:
@@ -58,6 +59,7 @@ class PHMLinear(torch.nn.Module):
         self._in_feats_per_axis = in_features // phm_dim
         self._out_feats_per_axis = out_features // phm_dim
         self.phm_rank = phm_rank
+        self.share_kv = share_kv
         self.phm_init_range = phm_init_range
         self.phm_rule_expert = phm_rule_expert
         self.factorized_phm = factorized_phm
@@ -67,25 +69,43 @@ class PHMLinear(torch.nn.Module):
         self.strategy = strategy
       
         if self.factorized_phm:
-            self.W_left_para = nn.Parameter(torch.Tensor(size=(2*self.layer_num*self.phm_dim*self._in_feats_per_axis, self.phm_rank)))
-            self.W_right_para = nn.Parameter(torch.Tensor(size=(2*self.layer_num*self.phm_dim*self.phm_rank, self._out_feats_per_axis)))
+            if self.share_kv:
+                self.W_left_para = nn.Parameter(torch.Tensor(size=(self.layer_num*self.phm_dim*self._in_feats_per_axis, self.phm_rank)))
+                self.W_right_para = nn.Parameter(torch.Tensor(size=(self.layer_num*self.phm_dim*self.phm_rank, self._out_feats_per_axis)))
+            else:
+                self.W_left_para = nn.Parameter(torch.Tensor(size=(2*self.layer_num*self.phm_dim*self._in_feats_per_axis, self.phm_rank)))
+                self.W_right_para = nn.Parameter(torch.Tensor(size=(2*self.layer_num*self.phm_dim*self.phm_rank, self._out_feats_per_axis)))
         else:
-            self.W_para = nn.Parameter(torch.Tensor(size=(2*self.layer_num*self.phm_dim*self._in_feats_per_axis, self._out_feats_per_axis)))
+            if self.share_kv:
+                self.W_para = nn.Parameter(torch.Tensor(size=(self.layer_num*self.phm_dim*self._in_feats_per_axis, self._out_feats_per_axis)))
+            else:
+                self.W_para = nn.Parameter(torch.Tensor(size=(2*self.layer_num*self.phm_dim*self._in_feats_per_axis, self._out_feats_per_axis)))
 
         if self.bias_flag:
-            self.b = nn.Parameter(torch.Tensor(2*self.layer_num*self.out_features))
+            if share_kv:
+                self.b = nn.Parameter(torch.Tensor(self.layer_num*self.out_features))
+            else:
+                self.b = nn.Parameter(torch.Tensor(2*self.layer_num*self.out_features))
         else:
             self.register_parameter('b', None)
             self.b = None
 
         if phm_rule == None:
             # layer_num > 1 means shared, layer_num == 1 means not shared
-            if self.strategy == 'mat':
-                self.phm_rule = nn.Parameter(torch.FloatTensor(2*self.phm_dim*self.phm_dim, self.phm_rank))
-            elif self.strategy == 'concat':
-                self.phm_rule = nn.Parameter(torch.FloatTensor(2*self.phm_dim*self.phm_dim, self.phm_dim // 2))
-            elif self.strategy == 'plus':
-                self.phm_rule = nn.Parameter(torch.FloatTensor(2*self.phm_dim*self.phm_dim, self.phm_dim))
+            if self.share_kv:
+                if self.strategy == 'mat':
+                    self.phm_rule = nn.Parameter(torch.FloatTensor(self.phm_dim*self.phm_dim, self.phm_rank))
+                elif self.strategy == 'concat':
+                    self.phm_rule = nn.Parameter(torch.FloatTensor(self.phm_dim*self.phm_dim, self.phm_dim // 2))
+                elif self.strategy == 'plus':
+                    self.phm_rule = nn.Parameter(torch.FloatTensor(self.phm_dim*self.phm_dim, self.phm_dim))
+            else:
+                if self.strategy == 'mat':
+                    self.phm_rule = nn.Parameter(torch.FloatTensor(2*self.phm_dim*self.phm_dim, self.phm_rank))
+                elif self.strategy == 'concat':
+                    self.phm_rule = nn.Parameter(torch.FloatTensor(2*self.phm_dim*self.phm_dim, self.phm_dim // 2))
+                elif self.strategy == 'plus':
+                    self.phm_rule = nn.Parameter(torch.FloatTensor(2*self.phm_dim*self.phm_dim, self.phm_dim))
         else:
             self.phm_rule = phm_rule
             
@@ -143,30 +163,27 @@ class PHMLinear(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.factorized_phm:
-            W_left_para = self.W_left_para.reshape(2*self.layer_num*self.phm_dim, self._in_feats_per_axis, self.phm_rank)
-            W_right_para = self.W_right_para.reshape(2*self.layer_num*self.phm_dim, self.phm_rank, self._out_feats_per_axis)
+            W_left_para = self.W_left_para.reshape(-1, self._in_feats_per_axis, self.phm_rank)
+            W_right_para = self.W_right_para.reshape(-1, self.phm_rank, self._out_feats_per_axis)
             W = torch.matmul(W_left_para, W_right_para)
         else:
-            W_para = self.W_para.reshape(2*self.layer_num*self.phm_dim, self._in_feats_per_axis, self._out_feats_per_axis)
+            W_para = self.W_para.reshape(-1, self._in_feats_per_axis, self._out_feats_per_axis)
             W = W_para
-
-        phm_rule_share = self.phm_rule.reshape(2*self.phm_dim, self.phm_dim, -1)
+        if self.share_kv:
+            phm_rule_share = self.phm_rule.reshape(self.phm_dim, self.phm_dim, -1)
+        else:
+            phm_rule_share = self.phm_rule.reshape(2*self.phm_dim, self.phm_dim, -1)
         phm_rule_share = phm_rule_share.repeat(self.layer_num, 1, 1)
         
         if self.phm_rule_expert != None:
             if self.strategy == 'mat':
-             
-             
-                phm_rule_expert = self.phm_rule_expert.reshape(2*self.layer_num*self.phm_dim, self.phm_rank, self.phm_dim)
-                
+                phm_rule_expert = self.phm_rule_expert.reshape(-1, self.phm_rank, self.phm_dim)
                 phm_rule_share = torch.matmul(phm_rule_share, phm_rule_expert)
-            
-      
             if self.strategy == 'plus':
-                phm_rule_expert = self.phm_rule_expert.reshape(2*self.layer_num*self.phm_dim, self.phm_dim, self.phm_dim)
+                phm_rule_expert = self.phm_rule_expert.reshape(-1, self.phm_dim, self.phm_dim)
                 phm_rule_share += phm_rule_expert
             elif self.strategy == 'concat':
-                phm_rule_expert = self.phm_rule_expert.reshape(2*self.layer_num*self.phm_dim, self.phm_dim, self.phm_dim // 2)
+                phm_rule_expert = self.phm_rule_expert.reshape(-1, self.phm_dim, self.phm_dim // 2)
                 phm_rule_share = torch.cat([phm_rule_share, phm_rule_expert], dim=-1)
         
         return matvec_product(

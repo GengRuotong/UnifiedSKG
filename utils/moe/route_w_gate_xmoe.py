@@ -326,7 +326,7 @@ def top2gating(
     l_aux = torch.mean(me * ce)
     l_aux = l_aux * num_experts * num_experts
     metadata["l_aux"] = l_aux
-    print(metadata)
+    # print(metadata)
 
     # Remove locations outside capacity from mask
     mask1 = mask1 * torch.lt(locations1, capacity)
