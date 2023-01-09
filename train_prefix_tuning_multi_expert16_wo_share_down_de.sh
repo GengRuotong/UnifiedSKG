@@ -5,14 +5,14 @@ export WANDB_PROJECT=T5_base_prefix_tuning_explore
 export WANDB_ENTITY=ruotonggeng
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node 2 train.py \
-    --run_name mt_multi_prefix_phm_expert8_de_split_xmoe_mat12_phm32_wo_share_down_de_linear \
+    --run_name mt_multi_prefix_phm_expert16_split_xmoe_mat12_phm32_wo_share_down_de \
     --local_rank -1 \
     --seed 3407 \
-    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_res_expert_wo_share_down_de.cfg \
+    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_res_expert16_wo_share_down_de.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
-    --output_dir output/T5_base_prefix_tuning/multi_domain_prefix_phm_expert8_de_split_xmoe_mat12_wo_share_down_de_linear \
+    --output_dir output/T5_base_prefix_tuning/multi_domain_prefix_phm_expert16_split_xmoe_mat12_wo_share_down \
     --do_train \
     --do_eval \
     --do_predict \
