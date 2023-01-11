@@ -16,10 +16,13 @@ def get_phm_rule_expert(base_layer_num=12,
                         phm_dim=32,
                         expert_struct: str='MLP_split_to_layers_w_share',
                         strategy: str='plus',
+                        phm_expert: bool=True,
                         phm_rank=1):
     assert strategy in ['plus', 'concat', 'mat']
     # phm_rule_expert.data.normal_(mean=0, std=0.0001)
-    if expert_struct == 'MLP_split_to_layers_w_share':
+    if not phm_expert:
+        return None
+    elif expert_struct == 'MLP_split_to_layers_w_share':
         if strategy == 'mat':
             phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_rank, phm_dim))
         elif strategy == 'plus':
@@ -46,10 +49,13 @@ def get_phm_rule_shared(
                         expert_struct: str='MLP_per_layer_w_share',
                         phm_rule_per_layer_share: bool=False,
                         moe_expert_count=8,
+                        phm_expert: bool=True,
                         strategy: str='plus'):
     assert strategy in ['plus', 'concat','mat']
     assert expert_struct in ['MLP_per_layer_w_share', 'MLP_split_to_layers_w_share'] 
-    if expert_struct == 'MLP_per_layer_w_share' and phm_rule_per_layer_share:
+    if not phm_expert:
+        return None
+    elif expert_struct == 'MLP_per_layer_w_share' and phm_rule_per_layer_share:
         phm_rule_shared = []
         if strategy == 'plus' or strategy == 'mat':
             for _ in range(moe_expert_count):

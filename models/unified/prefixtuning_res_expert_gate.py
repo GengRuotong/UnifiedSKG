@@ -87,12 +87,6 @@ class Model(PushToHubFriendlyModel):
         self.wte = nn.Embedding(self.preseqlen, self.n_embd)
         if 'decoder' in self.block_w_base:
             self.down_project = nn.Linear(self.n_embd, self.mid_dim)
-            '''
-            self.down_project = nn.Sequential(
-                nn.Linear(self.n_embd, self.mid_dim),
-                nn.ReLU()
-                )
-            '''
             self.gate = get_gate_instance(
                 model_dim=self.mid_dim,
                 num_expert=self.moe_expert_count,
@@ -105,6 +99,7 @@ class Model(PushToHubFriendlyModel):
                 base_layer_num=self.num_base_layers,
                 phm_dim=self.phm_dim, 
                 expert_struct=self.expert_struct,
+                phm_expert=self.phm_expert,
                 strategy=self.strategy)
 
             self.phm_rule_shared = get_phm_rule_shared(
@@ -112,6 +107,7 @@ class Model(PushToHubFriendlyModel):
                 moe_expert_count=self.moe_expert_count,
                 expert_struct=self.expert_struct,
                 phm_rule_per_layer_share=self.phm_rule_per_layer_share,
+                phm_expert=self.phm_expert,
                 strategy=self.strategy
             )
             if self.num_up_layers > 0:
@@ -134,7 +130,8 @@ class Model(PushToHubFriendlyModel):
                     strategy=self.strategy
                     )
             elif self.expert_struct == 'MLP_per_layer_w_share':
-                
+                # if experts are phm linear,then append
+                # phm_rule_expert=self.phm_rule_expert[i]
                 base_layer_net = [
                     BaseLayer(
                                 in_features=self.mid_dim,
@@ -142,7 +139,6 @@ class Model(PushToHubFriendlyModel):
                                 moe_expert_count=self.moe_expert_count,
                                 gate=self.gate[i],
                                 phm_expert=self.phm_expert,
-                                phm_rule_expert=self.phm_rule_expert[i],
                                 base_layer_num=1,
                                 phm_rule_shared=self.phm_rule_shared,
                                 factorized_phm=self.factorized_phm,

@@ -29,7 +29,8 @@ class BasePhmSublayer(nn.Module):
                  phm_dim: int,
                  phm_rule_expert_down=None,
                  phm_rule_expert_up=None,
-                 phm_rule_shared=None,
+                 phm_rule_shared_down=None,
+                 phm_rule_shared_up=None,
                  factorized_phm: bool=True,
                  phm_rank=1,
                  strategy: str='',
@@ -43,7 +44,8 @@ class BasePhmSublayer(nn.Module):
         self.phm_dim = phm_dim
         self.phm_rule_expert_down = phm_rule_expert_down
         self.phm_rule_expert_up = phm_rule_expert_up
-        self.phm_rule_shared = phm_rule_shared
+        self.phm_rule_shared_down = phm_rule_shared_down
+        self.phm_rule_shared_up = phm_rule_shared_up
         self.factorized_phm = factorized_phm
         self.phm_rank = phm_rank
         self.strategy = strategy
@@ -53,7 +55,7 @@ class BasePhmSublayer(nn.Module):
                                 out_features=self.mid_features,
                                 layer_num=1,
                                 phm_dim=self.phm_dim,
-                                phm_rule=self.phm_rule_shared,
+                                phm_rule=self.phm_rule_shared_down,
                                 phm_rule_expert=self.phm_rule_expert_down,
                                 phm_rank=self.phm_rank,
                                 factorized_phm=self.factorized_phm,
@@ -66,12 +68,14 @@ class BasePhmSublayer(nn.Module):
                              out_features=self.out_features,
                              layer_num=self.layer_num,
                              phm_dim=self.phm_dim,
-                             phm_rule=self.phm_rule_shared,
+                             phm_rule=self.phm_rule_shared_up,
                              phm_rule_expert=self.phm_rule_expert_up,
                              factorized_phm=self.factorized_phm,
                              phm_rank=self.phm_rank,
                              strategy=self.strategy
                             )
+        self.ff2.W_para.data.zero_()
+        self.ff2.b.data.zero_()
 
     def forward(self, x):
         return self.ff2(self.activate(self.ff1(x)))

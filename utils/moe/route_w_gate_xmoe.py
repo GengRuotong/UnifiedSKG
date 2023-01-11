@@ -41,7 +41,7 @@ def get_gate_instance(
         gate = nn.ModuleList(gate)
         for param in gate.parameters():
             param.gate = True
-    return gate
+        return gate
 
 def balanced_assignment(input_feature, expert_feature, scores):
     cost = -scores

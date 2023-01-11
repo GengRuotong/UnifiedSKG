@@ -5,30 +5,30 @@ export WANDB_PROJECT=T5_base_prefix_tuning_explore
 export WANDB_ENTITY=ruotonggeng
 
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 train.py \
-    --run_name mt_multi_prefix_phm32_expert12_split_xmoe_mat12_wo_share_down_de \
+    --run_name mt_multi_prefix_linear_expert8_perlayer6_xmoe_mat_phm32_wo_share_down \
     --local_rank -1 \
     --seed 3407 \
-    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_res_expert12_wo_share_down_de.cfg \
+    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_res_expert_wo_share_down_de_perlayer6.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
-    --output_dir output/T5_base_prefix_tuning/multi_domain_prefix_phm32_expert12_split_xmoe_mat12_wo_share_down \
+    --output_dir output/T5_base_prefix_tuning/multi_domain_prefix_phm_expert8_xmoe_mat_phm32_wo_share_down_de_perlayer6 \
     --do_train \
     --do_eval \
     --do_predict \
-    --predict_with_generate \
     --overwrite_output_dir \
+    --predict_with_generate \
     --num_train_epochs 50 \
     --gradient_accumulation_steps 1 \
     --logging_strategy steps \
     --logging_first_step true \
     --logging_steps 100 \
     --evaluation_strategy steps \
-    --eval_steps 94000 \
+    --eval_steps 2000 \
     --metric_for_best_model avr \
     --greater_is_better true \
     --save_strategy steps \
-    --save_steps 94000 \
+    --save_steps 2000 \
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \

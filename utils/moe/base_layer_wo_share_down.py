@@ -17,10 +17,13 @@ def get_phm_rule_expert(base_layer_num=12,
                         expert_struct: str='MLP_split_to_layers_w_share',
                         strategy: str='plus',
                         phm_rank=1,
+                        phm_expert:bool=True,
                         share_kv: bool=False):
     assert strategy in ['plus', 'concat', 'mat']
     # phm_rule_expert.data.normal_(mean=0, std=0.0001)
-    if expert_struct == 'MLP_split_to_layers_w_share':
+    if not phm_expert:
+        return None
+    elif expert_struct == 'MLP_split_to_layers_w_share':
         if share_kv:
             if strategy == 'mat':
                 phm_rule_expert = nn.Parameter(torch.FloatTensor(base_layer_num * phm_dim * phm_rank, phm_dim))
@@ -41,14 +44,14 @@ def get_phm_rule_expert(base_layer_num=12,
         if share_kv:
             if strategy == 'mat':
                 phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_dim * phm_rank, phm_dim)) for _ in range(base_layer_num)]
-            if strategy == 'plus':
+            elif strategy == 'plus':
                 phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_dim * phm_dim, phm_dim)) for _ in range(base_layer_num)]
             else:
                 phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_dim * phm_dim, phm_dim // 2)) for _ in range(base_layer_num)]
         else:
             if strategy == 'mat':
                 phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_rank, phm_dim)) for _ in range(base_layer_num)]
-            if strategy == 'plus':
+            elif strategy == 'plus':
                 phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim)) for _ in range(base_layer_num)]
             else:
                 phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim // 2)) for _ in range(base_layer_num)]
@@ -63,6 +66,7 @@ def get_phm_rule_shared(
                         expert_struct: str='MLP_per_layer_w_share',
                         phm_rule_per_layer_share: bool=False,
                         moe_expert_count=8,
+                        phm_rank=1,
                         strategy: str='plus',
                         share_kv: bool=False):
     assert strategy in ['plus', 'concat','mat']
@@ -70,19 +74,19 @@ def get_phm_rule_shared(
     if expert_struct == 'MLP_per_layer_w_share' and phm_rule_per_layer_share:
         phm_rule_shared = []
         if share_kv:
-            if strategy == 'plus' or strategy == 'mat':
-                for _ in range(moe_expert_count):
-                    phm_rule_shared.append(nn.Parameter(torch.FloatTensor(phm_dim*phm_dim, phm_dim)))
+            if strategy == 'plus':
+                phm_rule_shared = [nn.Parameter(torch.FloatTensor(phm_dim*phm_dim, phm_dim)) for _ in range(moe_expert_count)]
+            elif strategy == 'mat':
+                phm_rule_shared = [nn.Parameter(torch.FloatTensor(phm_dim*phm_dim, phm_rank)) for _ in range(moe_expert_count)]
             else:
-                for _ in range(moe_expert_count):
-                    phm_rule_shared.append(nn.Parameter(torch.FloatTensor(phm_dim*phm_dim, phm_dim // 2)))
+                phm_rule_shared = [nn.Parameter(torch.FloatTensor(phm_dim*phm_dim, phm_dim // 2)) for _ in range(moe_expert_count)]
         else:
-            if strategy == 'plus' or strategy == 'mat':
-                for _ in range(moe_expert_count):
-                    phm_rule_shared.append(nn.Parameter(torch.FloatTensor(2*phm_dim*phm_dim, phm_dim)))
+            if strategy == 'plus':
+                phm_rule_shared = [nn.Parameter(torch.FloatTensor(2*phm_dim*phm_dim, phm_dim)) for _ in range(moe_expert_count)]
+            elif strategy == 'mat':
+                phm_rule_shared = [nn.Parameter(torch.FloatTensor(2*phm_dim*phm_dim, phm_rank)) for _ in range(moe_expert_count)]
             else:
-                for _ in range(moe_expert_count):
-                    phm_rule_shared.append(nn.Parameter(torch.FloatTensor(2*phm_dim*phm_dim, phm_dim // 2)))
+                phm_rule_shared = [nn.Parameter(torch.FloatTensor(2*phm_dim*phm_dim, phm_dim // 2)) for _ in range(moe_expert_count)]
         for item in phm_rule_shared:
             item.data.normal_(mean=0, std=0.0001)
         return phm_rule_shared
@@ -104,7 +108,8 @@ class BaseLayer(nn.Module):
                  phm_rank=1,
                  phm_rule_expert_down = None,
                  phm_rule_expert_up = None,
-                 phm_rule_shared = None,
+                 phm_rule_shared_down = None,
+                 phm_rule_shared_up = None,
                  strategy: str='plus',
                  share_kv: bool='False',
                  ):
@@ -121,14 +126,15 @@ class BaseLayer(nn.Module):
         self.phm_rank = phm_rank
         self.phm_rule_expert_down = phm_rule_expert_down
         self.phm_rule_expert_up = phm_rule_expert_up
-        self.phm_rule_shared = phm_rule_shared
+        self.phm_rule_shared_down = phm_rule_shared_down
+        self.phm_rule_shared_up = phm_rule_shared_up
         self.strategy = strategy
         self.share_kv = share_kv
 
         # expert type, phm_expert only support MLP_split_to_layers
         if self.phm_expert:
             self.out_features = out_features // (2*self.base_layer_num)
-            if phm_rule_shared != None and self.base_layer_num == 1:
+            if phm_rule_shared_down != None or phm_rule_shared_down!= None and self.base_layer_num == 1:
                 expert_network =[BasePhmSublayer(
                     in_features=self.in_features,
                     mid_features=self.mid_features,
@@ -137,7 +143,8 @@ class BaseLayer(nn.Module):
                     phm_dim=self.phm_dim,
                     phm_rule_expert_down=self.phm_rule_expert_down,
                     phm_rule_expert_up=self.phm_rule_expert_up,
-                    phm_rule_shared=self.phm_rule_shared[i],
+                    phm_rule_shared_down=self.phm_rule_shared_down[i],
+                    phm_rule_shared_up=self.phm_rule_shared_up[i],
                     factorized_phm=self.factorized_phm,
                     phm_rank=self.phm_rank,
                     strategy=self.strategy,
@@ -154,7 +161,7 @@ class BaseLayer(nn.Module):
                     phm_rank=self.phm_rank,
                     phm_rule_expert_down=self.phm_rule_expert_down,
                     phm_rule_expert_up=self.phm_rule_expert_up,
-                    phm_rule_shared=self.phm_rule_shared,
+                    phm_rule_shared=None,
                     strategy=self.strategy,
                     share_kv= self.share_kv
                 ) for _ in range (self.moe_expert_count)]
