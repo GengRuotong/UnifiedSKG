@@ -1,18 +1,17 @@
 # python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
 # conda activate py3.7pytorch1.8new
-
 export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_prefix_tuning_explore
 export WANDB_ENTITY=ruotonggeng
-
-CUDA_VISIBLE_DEVICES=0,1 python train.py \
+python train.py \
+    --no_cuda True \
     --run_name mt_single_initial_multi_tune \
     --seed 2 \
-    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_combined.cfg \
+    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_combined_prefix.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
-    --output_dir output/T5_base_prefix_tuning/mt_single_initial_multi_tune/ \
+    --output_dir output/T5_base_prefix_tuning/mt_single_initial_multi_tune_try/ \
     --do_train \
     --do_eval \
     --do_predict \

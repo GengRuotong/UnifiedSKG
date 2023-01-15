@@ -15,33 +15,22 @@ def get_gate_instance(
              model_dim: int,
              num_expert: int,
              gate_type: str='Top1Gate',
-             expert_struct: str='MLP_split_to_layers_w_share',
              use_xmoe: bool=True,
              base_layer_num=12
             ):
-    assert expert_struct in ['MLP_split_to_layers_w_share', 'MLP_per_layer_w_share']
     assert gate_type in ['Top1Gate', 'Top2Gate']
-    if expert_struct == 'MLP_split_to_layers_w_share':
+    gate = []
+    for _ in range(base_layer_num):
         if gate_type == 'Top1Gate':
-            gate = Top1Gate(model_dim=model_dim, num_experts=num_expert, use_xmoe=use_xmoe)
+            gate.append(Top1Gate(model_dim=model_dim, num_experts=num_expert, use_xmoe=use_xmoe))
         elif gate_type == 'Top2Gate':
-            gate = Top2Gate(model_dim=model_dim, num_experts=num_expert, use_xmoe=use_xmoe)
+            gate.append(Top2Gate(model_dim=model_dim, num_experts=num_expert, use_xmoe=use_xmoe))
         else:
             raise ValueError("Other gate_types are not supported yet!")
-        return gate
-    elif expert_struct == 'MLP_per_layer_w_share':
-        gate = []
-        for _ in range(base_layer_num):
-            if gate_type == 'Top1Gate':
-                gate.append(Top1Gate(model_dim=model_dim, num_experts=num_expert, use_xmoe=use_xmoe))
-            elif gate_type == 'Top2Gate':
-                gate.append(Top2Gate(model_dim=model_dim, num_experts=num_expert, use_xmoe=use_xmoe))
-            else:
-                raise ValueError("Other gate_types are not supported yet!")
-        gate = nn.ModuleList(gate)
-        for param in gate.parameters():
-            param.gate = True
-        return gate
+    gate = nn.ModuleList(gate)
+    for param in gate.parameters():
+        param.gate = True
+    return gate
 
 def balanced_assignment(input_feature, expert_feature, scores):
     cost = -scores
@@ -172,8 +161,8 @@ class Top1Gate(torch.nn.Module):
         if not use_xmoe:
             expert_centroids = torch.empty(num_experts, model_dim)
         else:
-            self.dim_reduction = nn.Linear(model_dim, 8, bias=False)
-            expert_centroids = torch.empty(num_experts, 8)
+            self.dim_reduction = nn.Linear(model_dim, 4, bias=False)
+            expert_centroids = torch.empty(num_experts, 4)
         nn.init.orthogonal_(expert_centroids, gain=0.32)
         self.register_parameter(
             "expert_centroids", nn.Parameter(expert_centroids)
@@ -396,8 +385,8 @@ class Top2Gate(torch.nn.Module):
         if not use_xmoe:
             expert_centroids = torch.empty(num_experts, model_dim)
         else:
-            self.dim_reduction = torch.nn.Linear(model_dim, 8, bias=False)
-            expert_centroids = torch.empty(num_experts, 8)
+            self.dim_reduction = nn.Linear(model_dim, 4, bias=False)
+            expert_centroids = torch.empty(num_experts, 4)
         torch.nn.init.orthogonal_(expert_centroids, gain=0.32)
         self.register_parameter("expert_centroids", torch.nn.Parameter(expert_centroids))
         

@@ -1,18 +1,18 @@
 # CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 train.py \
 # conda activate py3.7pytorch1.8new
 export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
-export WANDB_PROJECT=T5_base_prefix_tuning_explore
+export WANDB_PROJECT=T5_base_prefix_tuning_new
 export WANDB_ENTITY=ruotonggeng
 
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 train.py \
-    --run_name mt_multi_prefix_phm_expert8_de_split_xmoe_mat12_phm32_top2gate \
+    --run_name expert8_de_phm32_top2gate \
     --local_rank -1 \
     --seed 3407 \
-    --cfg Salesforce/T5_base_prefix_summary_3domains_upsample2_res_expert.cfg \
+    --cfg Salesforce/T5_base_prefix_summary_5domains_upsample2_res_expert.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
-    --output_dir output/T5_base_prefix_tuning/multi_domain_prefix_phm_expert8_de_split_xmoe_mat12_top2gate \
+    --output_dir output/T5_base_prefix_tuning/5domain_expert8_dephm32_top2gate \
     --do_train \
     --do_eval \
     --do_predict \

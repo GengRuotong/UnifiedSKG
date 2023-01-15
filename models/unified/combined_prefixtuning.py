@@ -316,11 +316,6 @@ class Model(PushToHubFriendlyModel):
                     if param_name.startswith(task_name):
                         param.requires_grad = False
 
-        if self.args.model.freeze_task_new_prefix:
-            for param_name, param in self.multi_prefix.named_parameters():
-                if param_name.startswith("new_prefix"):
-                    param.requires_grad = False
-
     def get_prompt(
         self, task_name, prefix_len, bsz=None, sample_size=1, description=None, knowledge=None
     ):

@@ -50,7 +50,7 @@ def main() -> None:
     args = Configure.Get(training_args.cfg)
 
     # Set whether to freeze pre training language model parameters
-    if 'unified.prefixtuning' in args.model.name:
+    if 'prefixtuning' in args.model.name:
         args.model.freeze_plm = training_args.freeze_plm
 
     if args.bert.description == 't5-pegasus':
@@ -229,6 +229,10 @@ def main() -> None:
             for weight_name, stored_tensor in state_dict.items():
                 if str(weight_name).startswith("pretrain_model"):
                     continue  # skip the pretrained model and we will load a new one from another place
+                if args.expert.phm_expert:
+                    de_non_expert_layer_num = 12 - args.expert.num_base_layers
+                    if 'control_trans.2' in str(weight_name):
+                        stored_tensor = stored_tensor.split(2*de_non_expert_layer_num*768)[0]
                 reconstruct_state_dict['{}.{}.{}'.format(MULTI_PREFIX_ATTR_NAME, "_".join(task_name.split("_")[:-1]), weight_name)] = stored_tensor
                 # extract the prefix part and add them to dict
 

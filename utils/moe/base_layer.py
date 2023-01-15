@@ -6,7 +6,7 @@
 import logging
 import torch
 from torch import Tensor, nn
-from .base_sublayer_wo_share_down import BaseSublayer, BasePhmSublayer
+from .base_sublayer import BaseSublayer, BasePhmSublayer, BaseLPSublayer, BasePLSublayer
 
 fused_cumsum_sub_one = lambda mask: torch.cumsum(mask, dim=0) - 1
 
@@ -14,33 +14,15 @@ logger = logging.getLogger(__name__)
 
 def get_phm_rule_expert(base_layer_num=12, 
                         phm_dim=32,
-                        expert_struct: str='MLP_split_to_layers_w_share',
                         strategy: str='plus',
                         phm_rank=1,
-                        phm_expert:bool=True,
+                        phm_rule_expert_share: bool=False,
                         share_kv: bool=False):
     assert strategy in ['plus', 'concat', 'mat']
     # phm_rule_expert.data.normal_(mean=0, std=0.0001)
-    if not phm_expert:
+    if not phm_rule_expert_share:
         return None
-    elif expert_struct == 'MLP_split_to_layers_w_share':
-        if share_kv:
-            if strategy == 'mat':
-                phm_rule_expert = nn.Parameter(torch.FloatTensor(base_layer_num * phm_dim * phm_rank, phm_dim))
-            elif strategy == 'plus':
-                phm_rule_expert = nn.Parameter(torch.FloatTensor(base_layer_num * phm_dim * phm_dim, phm_dim))
-            else:
-                phm_rule_expert = nn.Parameter(torch.FloatTensor(base_layer_num * phm_dim * phm_dim, phm_dim // 2))
-        else:
-            if strategy == 'mat':
-                phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_rank, phm_dim))
-            elif strategy == 'plus':
-                phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_dim, phm_dim))
-            else:
-                phm_rule_expert = nn.Parameter(torch.FloatTensor(2*base_layer_num * phm_dim * phm_dim, phm_dim // 2))
-        phm_rule_expert.data.normal_(mean=0, std=0.0001)
-        return phm_rule_expert
-    elif expert_struct == 'MLP_per_layer_w_share':
+    else:
         if share_kv:
             if strategy == 'mat':
                 phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_dim * phm_rank, phm_dim)) for _ in range(base_layer_num)]
@@ -58,20 +40,16 @@ def get_phm_rule_expert(base_layer_num=12,
         for item in phm_rule_expert:
             item.data.normal_(mean=0, std=0.0001)
         return phm_rule_expert
-    else:
-        raise ValueError("Other gate_types are not supported yet!")
 
 def get_phm_rule_shared(
                         phm_dim=32,
-                        expert_struct: str='MLP_per_layer_w_share',
                         phm_rule_per_layer_share: bool=False,
                         moe_expert_count=8,
                         phm_rank=1,
-                        strategy: str='plus',
+                        strategy: str='mat',
                         share_kv: bool=False):
-    assert strategy in ['plus', 'concat','mat']
-    assert expert_struct in ['MLP_per_layer_w_share', 'MLP_split_to_layers_w_share'] 
-    if expert_struct == 'MLP_per_layer_w_share' and phm_rule_per_layer_share:
+    assert strategy in ['plus', 'concat','mat'] 
+    if phm_rule_per_layer_share:
         phm_rule_shared = []
         if share_kv:
             if strategy == 'plus':
@@ -99,19 +77,19 @@ class BaseLayer(nn.Module):
                  mid_features: int,
                  out_features: int,
                  base_shuffle=True,
-                 moe_expert_count=4,
+                 moe_expert_count=8,
                  base_layer_num=1,
                  phm_dim=32,
                  gate=None,
-                 phm_expert: bool = False,
-                 factorized_phm: bool = True,
+                 factorized_phm: bool = False,
                  phm_rank=1,
                  phm_rule_expert_down = None,
                  phm_rule_expert_up = None,
                  phm_rule_shared_down = None,
                  phm_rule_shared_up = None,
-                 strategy: str='plus',
+                 strategy: str='mat',
                  share_kv: bool='False',
+                 project_struct: str='PP',
                  ):
         super().__init__()
         self.base_shuffle = base_shuffle
@@ -121,7 +99,6 @@ class BaseLayer(nn.Module):
         self.phm_dim = phm_dim
         self.moe_expert_count = moe_expert_count
         self.gate = gate
-        self.phm_expert = phm_expert
         self.factorized_phm = factorized_phm
         self.phm_rank = phm_rank
         self.phm_rule_expert_down = phm_rule_expert_down
@@ -130,12 +107,47 @@ class BaseLayer(nn.Module):
         self.phm_rule_shared_up = phm_rule_shared_up
         self.strategy = strategy
         self.share_kv = share_kv
+        self.project_struct = project_struct
 
         # expert type, phm_expert only support MLP_split_to_layers
-        if self.phm_expert:
+        if self.project_struct == 'PP' or self.project_struct == 'LP':
             self.out_features = out_features // (2*self.base_layer_num)
-            if phm_rule_shared_down != None or phm_rule_shared_down!= None and self.base_layer_num == 1:
-                expert_network =[BasePhmSublayer(
+            if self.project_struct == 'PP':
+                    expert_network =[BasePhmSublayer(
+                        in_features=self.in_features,
+                        mid_features=self.mid_features,
+                        out_features=self.out_features,
+                        layer_num=self.base_layer_num,
+                        phm_dim=self.phm_dim,
+                        phm_rule_expert_down=self.phm_rule_expert_down,
+                        phm_rule_expert_up=self.phm_rule_expert_up,
+                        phm_rule_shared_down=self.phm_rule_shared_down[i],
+                        phm_rule_shared_up=self.phm_rule_shared_up[i],
+                        factorized_phm=self.factorized_phm,
+                        phm_rank=self.phm_rank,
+                        strategy=self.strategy,
+                        share_kv= self.share_kv
+                    ) for i in range (self.moe_expert_count)]
+            elif self.project_struct == 'LP':
+                    expert_network =[BaseLPSublayer(
+                        in_features=self.in_features,
+                        mid_features=self.mid_features,
+                        out_features=self.out_features,
+                        layer_num=self.base_layer_num,
+                        phm_dim=self.phm_dim,
+                        phm_rule_expert_down=self.phm_rule_expert_down,
+                        phm_rule_expert_up=self.phm_rule_expert_up,
+                        phm_rule_shared_down=self.phm_rule_shared_down[i],
+                        phm_rule_shared_up=self.phm_rule_shared_up[i],
+                        factorized_phm=self.factorized_phm,
+                        phm_rank=self.phm_rank,
+                        strategy=self.strategy,
+                        share_kv= self.share_kv
+                    ) for i in range (self.moe_expert_count)]  
+        else:
+            self.out_features = out_features
+            if self.project_struct == 'PL':
+                expert_network =[BasePLSublayer(
                     in_features=self.in_features,
                     mid_features=self.mid_features,
                     out_features=self.out_features,
@@ -151,27 +163,11 @@ class BaseLayer(nn.Module):
                     share_kv= self.share_kv
                 ) for i in range (self.moe_expert_count)]
             else:
-                expert_network =[BasePhmSublayer(
-                    in_features=self.in_features,
-                    mid_features=self.mid_features,
-                    out_features=self.out_features,
-                    layer_num=self.base_layer_num,
-                    phm_dim=self.phm_dim,
-                    factorized_phm=self.factorized_phm,
-                    phm_rank=self.phm_rank,
-                    phm_rule_expert_down=self.phm_rule_expert_down,
-                    phm_rule_expert_up=self.phm_rule_expert_up,
-                    phm_rule_shared=None,
-                    strategy=self.strategy,
-                    share_kv= self.share_kv
-                ) for _ in range (self.moe_expert_count)]
-        else:
-            self.out_features = out_features
-            expert_network =[BaseSublayer(
-                            in_features=self.in_features,
-                            mid_features=self.mid_features,
-                            out_features=self.out_features,
-                            ) for _ in range (self.moe_expert_count)]
+                expert_network =[BaseSublayer(
+                                in_features=self.in_features,
+                                mid_features=self.mid_features,
+                                out_features=self.out_features,
+                                ) for _ in range (self.moe_expert_count)]
         self.experts = nn.ModuleList(expert_network) 
         # Add a special attribute to the expert parameters, so we know not to sync their gradients
         for param in self.experts.parameters():

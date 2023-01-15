@@ -7,8 +7,12 @@ from transformers import AutoTokenizer
 from .tokenizer_chn import T5PegasusTokenizer
 from .base import PushToHubFriendlyModel
 from ..prompt.modeling_auto import AutoModelForSeq2SeqLM
+# from utils.moe.base_layer import BaseLayer
+from utils.moe.base_layer import BaseLayer, get_phm_rule_expert, get_phm_rule_shared
+from utils.moe.route import get_gate_instance
+from collections import defaultdict
 
-
+SUPPORT_PRETRAINED_MODEL = ['BartForConditionalGeneration', 'T5ForConditionalGeneration', 'MT5ForConditionalGeneration']
 
 class Model(PushToHubFriendlyModel):
     def __init__(self, args):
@@ -20,6 +24,22 @@ class Model(PushToHubFriendlyModel):
         self.preseqlen = args.prefix_tuning.prefix_sequence_length
         self.mid_dim = args.prefix_tuning.mid_dim
 
+        # expert
+        self.moe_expert_count = args.expert.moe_expert_count
+        self.num_base_layers = args.expert.num_base_layers
+        self.block_w_base = args.expert.block_w_base
+        self.project_struct = args.expert.project_struct
+        self.use_xmoe = args.expert.use_xmoe
+        self.phm_rule_per_layer_share = args.expert.phm_rule_per_layer_share
+        self.share_kv = args.expert.share_kv_down
+        
+        # phm
+        self.phm_dim = args.model.phm_dim
+        self.phm_rank=args.model.phm_rank
+        self.factorized_phm = args.model.factorized_phm
+        self.strategy = args.model.strategy
+        print(self.block_w_base, self.strategy)
+       
         print("prefix-tuning sequence length is {}.".format(self.preseqlen))
 
         # Load tokenizer and model.
@@ -63,48 +83,93 @@ class Model(PushToHubFriendlyModel):
         # Prefix related.
         # self.n_embd, self.mid_dim = 768, 512
         self.register_buffer('input_tokens', torch.arange(self.preseqlen).long())
-
+        self.num_up_layers = self.match_n_layer - self.num_base_layers
+        # dec
         self.wte = nn.Embedding(self.preseqlen, self.n_embd)
-        self.control_trans = nn.Sequential(
-            nn.Linear(self.n_embd, self.mid_dim),
-            nn.ReLU(),
-            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
-        )
-        if self.args.model.knowledge_usage == 'separate':
-            self.knowledge_trans = nn.Sequential(
+        if 'decoder' in self.block_w_base:
+            self.gate = get_gate_instance(
+                model_dim=self.n_embd,
+                num_expert=self.moe_expert_count,
+                gate_type='Top2Gate',
+                base_layer_num=self.num_base_layers,
+                use_xmoe=self.use_xmoe
+            )
+            self.phm_rule_expert_down = get_phm_rule_expert(
+                base_layer_num=self.num_base_layers,
+                phm_dim=self.phm_dim, 
+                phm_rule_expert_share=True,
+                strategy=self.strategy,
+                share_kv=self.share_kv)
+
+            self.phm_rule_expert_up = get_phm_rule_expert(
+                base_layer_num=self.num_base_layers,
+                phm_dim=self.phm_dim, 
+                phm_rule_expert_share=True,
+                strategy=self.strategy)
+
+            self.phm_rule_shared_down = get_phm_rule_shared(
+                phm_dim=self.phm_dim,
+                moe_expert_count=self.moe_expert_count,
+                phm_rule_per_layer_share=self.phm_rule_per_layer_share,
+                strategy=self.strategy,
+                share_kv=self.share_kv
+            )
+            self.phm_rule_shared_up = get_phm_rule_shared(
+                phm_dim=self.phm_dim,
+                moe_expert_count=self.moe_expert_count,
+                phm_rule_per_layer_share=self.phm_rule_per_layer_share,
+                strategy=self.strategy
+            )
+            if self.num_up_layers > 0:
+                # self.up_project = nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd)
+                self.up_project = nn.Sequential(
+                    nn.Linear(self.n_embd, self.mid_dim),
+                    nn.ReLU(),
+                    nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd),
+                )
+            
+            base_layer_net = [BaseLayer(
+                            in_features=self.n_embd,
+                            mid_features=self.mid_dim,
+                            out_features=2 * self.match_n_head * self.match_n_embd,
+                            moe_expert_count=self.moe_expert_count,
+                            gate=self.gate[i],
+                            project_struct=self.project_struct,
+                            phm_rule_expert_down=self.phm_rule_expert_down[i],
+                            phm_rule_expert_up=self.phm_rule_expert_up[i],
+                            base_layer_num=1,
+                            phm_rule_shared_down=self.phm_rule_shared_down,
+                            phm_rule_shared_up=self.phm_rule_shared_up,
+                            factorized_phm=self.factorized_phm,
+                            phm_rank=self.phm_rank,
+                            strategy=self.strategy,
+                            share_kv=self.share_kv) for i in range(self.num_base_layers)]
+            self.base_layer_net = nn.ModuleList(base_layer_net)
+        else:
+            self.control_trans = nn.Sequential(
                 nn.Linear(self.n_embd, self.mid_dim),
                 nn.ReLU(),
                 nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
             )
-
+        self.norm = nn.LayerNorm(self.match_n_embd)
+        
+        # enc
         self.wte_enc = nn.Embedding(self.preseqlen, self.n_embd)
         self.control_trans_enc = nn.Sequential(
             nn.Linear(self.n_embd, self.mid_dim),
             nn.ReLU(),
             nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
         )
-        if self.args.model.knowledge_usage == 'separate':
-            self.knowledge_trans_enc = nn.Sequential(
-                nn.Linear(self.n_embd, self.mid_dim),
-                nn.ReLU(),
-                nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
-            )
+        self.norm_enc = nn.LayerNorm(self.match_n_embd)
 
+        # cross
         self.wte_dec = nn.Embedding(self.preseqlen, self.n_embd)
         self.control_trans_dec = nn.Sequential(
             nn.Linear(self.n_embd, self.mid_dim),
             nn.ReLU(),
             nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
         )
-
-        # Knowledge prompt.
-        if self.args.model.knowledge_usage == 'separate':
-            self.knowledge_trans_dec = nn.Sequential(
-                nn.Linear(self.n_embd, self.mid_dim),
-                nn.ReLU(),
-                nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
-            )
-
+        self.norm_dec = nn.LayerNorm(self.match_n_embd)
         self.dropout = nn.Dropout(args.prefix_tuning.prefix_dropout)
 
         if self.args.model.freeze_plm:
@@ -112,18 +177,11 @@ class Model(PushToHubFriendlyModel):
                 param.requires_grad = False
         
         if self.args.model.freeze_prefix:
-            for param in self.wte.parameters():
-                param.requires_grad = False
-            for param in self.control_trans.parameters():
-                param.requires_grad = False
-            for param in self.wte_dec.parameters():
-                param.requires_grad = False
-            for param in self.control_trans_dec.parameters():
-                param.requires_grad = False
-            for param in self.wte_enc.parameters():
-                param.requires_grad = False
-            for param in self.control_trans_enc.parameters():
-                param.requires_grad = False
+            for name, module in self.named_modules():
+                if name not in SUPPORT_PRETRAINED_MODEL:
+                # print(name)
+                    for param in module.parameters():
+                        param.requires_grad = False
     
 
     def get_prompt(self, bsz=None, sample_size=1, description=None, knowledge=None):
@@ -133,58 +191,56 @@ class Model(PushToHubFriendlyModel):
         (batch_size, num_heads, sequence_length - 1, embed_size_per_head)) — Contains precomputed key and value hidden states 
         of the attention blocks. Can be used to speed up decoding.
         '''
+        balance_loss = 0.0
         # Decoder Prefix
         old_bsz = bsz
         bsz = bsz * sample_size
         input_tokens = self.input_tokens.unsqueeze(0).expand(bsz, -1) # bsz, seqlen
         temp_control = self.wte(input_tokens)
-        if description is not None:
-            temp_control = temp_control + description.repeat_interleave(sample_size, dim=0).unsqueeze(1)
-        past_key_values = self.control_trans(temp_control)  # bsz, seqlen, 2*layer*head*d_h
+        if 'decoder' in self.block_w_base:
+            base_layer_control_list = []
+            for i in range(self.num_base_layers):
+                base_layer_control_per_layer, l_aux = self.base_layer_net[i](temp_control)
+                balance_loss += l_aux
+                base_layer_control_list.append(base_layer_control_per_layer)
+            base_layer_control = torch.cat(base_layer_control_list, dim=-1)
+            if self.num_up_layers > 0:
+                up_control = self.up_project(temp_control)
+                base_layer_control = torch.cat([up_control, base_layer_control], dim=-1)
+            past_key_values = base_layer_control
+        else:
+            past_key_values = self.control_trans(temp_control)
+        res_temp_control = temp_control.repeat(1, 1, 2 * self.match_n_layer)
+        past_key_values += res_temp_control
         
-        if knowledge is not None:
-            past_key_values = torch.cat([past_key_values, self.knowledge_trans(knowledge.repeat_interleave(sample_size, dim=0))], dim=1)
-
         bsz, seqlen, _ = past_key_values.shape
-        
         past_key_values = past_key_values.view(
             bsz, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
         ) # bsz = 8, seqlen = 10, past_key_values.shape = torch.Size([8, 10, 24, 12, 64])
         past_key_values = self.dropout(past_key_values)
-        # past_key_values.permute([2, 0, 3, 1, 4]).shape = ([24, 8, 12, 10, 64])
-        # past_key_values.permute([2, 0, 3, 1, 4]).split(2) is a tuple, has 12 numbers, each of them has a size ([2, 8, 12, 10, 64])
+        past_key_values = self.norm(past_key_values)
         past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
 
         # Cross prefix
         temp_control_dec = self.wte_dec(input_tokens)
-        if description is not None:
-            temp_control_dec = temp_control_dec + description.repeat_interleave(sample_size, dim=0).unsqueeze(1)
-        past_key_values_dec = self.control_trans_dec(
-            temp_control_dec
-        )  # bsz, seqlen, layer*emb
-        if knowledge is not None:
-            past_key_values_dec = torch.cat([past_key_values_dec, self.knowledge_trans_dec(knowledge.repeat_interleave(sample_size, dim=0))], dim=1)
+        past_key_values_dec = self.control_trans_dec(temp_control_dec)
+        res_temp_control_dec = temp_control_dec.repeat(1, 1, 2*self.match_n_layer)
+        past_key_values_dec += res_temp_control_dec
 
         bsz, seqlen, _ = past_key_values_dec.shape
         past_key_values_dec = past_key_values_dec.view(
             bsz, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
         )
         past_key_values_dec = self.dropout(past_key_values_dec)
+        past_key_values_dec = self.norm_dec(past_key_values_dec)
         past_key_values_dec = past_key_values_dec.permute([2, 0, 3, 1, 4]).split(2)
 
         # Encoder prefix
-        input_tokens_enc = (
-            self.input_tokens.unsqueeze(0).expand(old_bsz, -1)
-        )
+        input_tokens_enc = (self.input_tokens.unsqueeze(0).expand(old_bsz, -1))
         temp_control_enc = self.wte_enc(input_tokens_enc)
-        if description is not None:
-            temp_control_enc = temp_control_enc + description.unsqueeze(1)
-        past_key_values_enc = self.control_trans_enc(
-            temp_control_enc
-        )  # bsz, seqlen, layer*emb
-        if knowledge is not None:
-            past_key_values_enc = torch.cat([past_key_values_enc, self.knowledge_trans_enc(knowledge)], dim=1)
-
+        past_key_values_enc = self.control_trans_enc(temp_control_enc)
+        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2*self.match_n_layer)
+        past_key_values_enc += res_temp_control_enc
         bsz_enc, seqlen, _ = past_key_values_enc.shape
         past_key_values_enc = past_key_values_enc.view(
             bsz_enc,
@@ -194,6 +250,7 @@ class Model(PushToHubFriendlyModel):
             self.match_n_embd,
         )
         past_key_values_enc = self.dropout(past_key_values_enc)
+        past_key_values_enc = self.norm_enc(past_key_values_enc)
         past_key_values_enc = past_key_values_enc.permute([2, 0, 3, 1, 4]).split(2)
 
         result = []
@@ -225,55 +282,7 @@ class Model(PushToHubFriendlyModel):
             }
             result.append(temp)
 
-        return result
-
-    def get_description_representation(self, kwargs):
-        if self.args.model.use_description and self.args.model.map_description:
-            description_input_ids = kwargs.pop("description_input_ids")
-            description_attention_mask = kwargs.pop("description_attention_mask")
-            if self.args.bert.location in ["t5-small", "t5-base", "t5-large", "t5-3b", "t5-11b"]:
-                description_outputs = self.pretrain_model.encoder(
-                    input_ids=description_input_ids,
-                    attention_mask=description_attention_mask,
-                )
-                description = description_outputs.last_hidden_state[:, 0]  # TODO: the first token from the encoder.
-            elif self.args.bert.location in ["facebook/bart-base", "facebook/bart-large"]:
-                description_outputs = self.pretrain_model.model.encoder(
-                    input_ids=description_input_ids,
-                    attention_mask=description_attention_mask,
-                )
-                description = description_outputs.last_hidden_state[:, 0]  # TODO: the first token from the encoder.
-            else:
-                raise ValueError()
-        else:
-            description = None
-
-        return description
-
-    def get_knowledge_representation(self, kwargs):
-        if self.args.model.knowledge_usage == 'separate':
-            knowledge_input_ids = kwargs.pop("knowledge_input_ids", None)
-            knowledge_attention_mask = kwargs.pop("knowledge_attention_mask", None)
-            if self.args.bert.location in ["t5-small", "t5-base", "t5-large", "t5-3b", "t5-11b"]:
-                knowledge_outputs = self.pretrain_model.encoder(
-                    input_ids=knowledge_input_ids,
-                    attention_mask=knowledge_attention_mask,
-                )
-                knowledge = knowledge_outputs.last_hidden_state
-            elif self.args.bert.location in ["facebook/bart-base", "facebook/bart-large"]:
-                knowledge_outputs = self.pretrain_model.model.encoder(
-                    input_ids=knowledge_input_ids,
-                    attention_mask=knowledge_attention_mask,
-                )
-                knowledge = knowledge_outputs.last_hidden_state
-            else:
-                raise ValueError()
-        elif self.args.model.knowledge_usage == 'concatenate':
-            knowledge = None
-        else:
-            raise ValueError()
-
-        return knowledge
+        return result, balance_loss
 
     def forward(self,
                 input_ids,
@@ -283,24 +292,16 @@ class Model(PushToHubFriendlyModel):
                 ):
         bsz = input_ids.shape[0]
 
-        # Encode description.
-        description_representation = self.get_description_representation(kwargs)
-        
+        past_prompt, balance_loss = self.get_prompt(bsz=bsz)
 
-        # Encode knowledge.
-        knowledge_representation = self.get_knowledge_representation(kwargs)
-
-        past_prompt = self.get_prompt(
-            bsz=bsz, description=description_representation, knowledge=knowledge_representation,
-        )
-
-        loss = self.pretrain_model(
+        mle_loss = self.pretrain_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             labels=labels,
             past_prompt=past_prompt,
         ).loss
-        return {'loss': loss}
+        total_loss = mle_loss + 2*balance_loss
+        return {'loss': total_loss}
 
     def generate(self,
                  input_ids,
@@ -309,15 +310,7 @@ class Model(PushToHubFriendlyModel):
 
         bsz = input_ids.shape[0]
 
-        # Encode description.
-        description_representation = self.get_description_representation(kwargs)
-
-        # Encode knowledge.
-        knowledge_representation = self.get_knowledge_representation(kwargs)
-
-        past_prompt = self.get_prompt(
-            bsz=bsz, sample_size=kwargs['num_beams'], description=description_representation, knowledge=knowledge_representation,
-        )
+        past_prompt, _ = self.get_prompt(bsz=bsz, sample_size=kwargs['num_beams'])
         generated_ids = self.pretrain_model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -327,3 +320,5 @@ class Model(PushToHubFriendlyModel):
         )
 
         return generated_ids
+
+
