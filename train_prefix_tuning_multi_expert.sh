@@ -33,10 +33,8 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --load_best_model_at_end \
     --adafactor true \
     --learning_rate 1e-3 \
-    --lr_scheduler_type cosine_with_restarts \
-    --weight_decay 1e-4\
-    --per_device_train_batch_size 4 \
-    --per_device_eval_batch_size 16 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 128 \
     --generation_num_beams 1 \
     --generation_max_length 128 \
     --input_max_length 512 \
