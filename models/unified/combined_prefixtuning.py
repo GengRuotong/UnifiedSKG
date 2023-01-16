@@ -19,66 +19,9 @@ def aggregate_prompt(
     past_prompt_dict: a dict of past_prompt from different tasks.
     """
     constructed_prompt = None
-    if strategy in ["simple_separate", "separate_with_new_prefix"]:
-        # stack all prefix on the dim of bsz
-        for task_name in task_names_list:
-            bsz = len(task_names_list)
-            prompt_of_this_task = past_prompt_dict[task_name]
-            if not constructed_prompt:
-                constructed_prompt = [{k: {_k: _v for _k, _v in v.items()} for k, v in item.items()} for item in prompt_of_this_task]
-                continue
-            for layer_number, prompt_of_this_task_in_this_layer in enumerate(
-                prompt_of_this_task
-            ):
-                constructed_prompt_layer = constructed_prompt[layer_number]
-                for prompt_pos in [
-                    "decoder_prompt",
-                    "cross_attention_prompt",
-                    "encoder_prompt",
-                ]:
-                    for key_value_attention_mask in [
-                        "prev_key",
-                        "prev_value",
-                        "prev_key_padding_mask",
-                    ]:
-                        if key_value_attention_mask == "prev_key_padding_mask":
-                            constructed_prompt_layer[prompt_pos][
-                                key_value_attention_mask
-                            ] = torch.cat(
-                                [
-                                    constructed_prompt_layer[prompt_pos][
-                                        key_value_attention_mask
-                                    ],
-                                    prompt_of_this_task[layer_number][prompt_pos][
-                                        key_value_attention_mask
-                                    ],
-                                ],
-                                dim=0,
-                            )
-                        else:
-                            #print(constructed_prompt_layer[prompt_pos][
-                            #          key_value_attention_mask
-                            #      ].shape)
-                            constructed_prompt_layer[prompt_pos][
-                                key_value_attention_mask
-                            ] = torch.cat(
-                                [
-                                    constructed_prompt_layer[prompt_pos][
-                                        key_value_attention_mask
-                                    ],
-                                    prompt_of_this_task[layer_number][prompt_pos][
-                                        key_value_attention_mask
-                                    ],
-                                ],
-                                dim=0,
-                            )
-                            # concat in the dim of the bsz
-                            # TODO: add code of attention padding when with different prefix len.
 
-    elif strategy in ["simple_concat", "concat_with_new_prefix"]:
+    if strategy == "simple_concat":
         for task_name, prompt_of_this_task in past_prompt_dict.items():
-            if task_name == "new_prefix":
-                continue
             if not constructed_prompt:
                 constructed_prompt = [{k: {_k: _v for _k, _v in v.items()} for k, v in item.items()} for item in prompt_of_this_task]
                 continue
@@ -125,54 +68,6 @@ def aggregate_prompt(
                                 dim=2,
                             )
                             # concat in the dim of the prefix_len
-    elif strategy == "gnn":
-        pass
-    else:
-        raise ValueError("Other strategy has been implemented yet!!")
-
-    if strategy in ["separate_with_new_prefix", "concat_with_new_prefix"]:
-        # add the shared prefix in the front of multi prefix_s
-        new_prefix = past_prompt_dict["new_prefix"]
-        for layer_number, _ in enumerate(new_prefix):
-            constructed_prompt_layer = constructed_prompt[layer_number]
-            for prompt_pos in [
-                "decoder_prompt",
-                "cross_attention_prompt",
-                "encoder_prompt",
-            ]:
-                for key_value_attention_mask in [
-                    "prev_key",
-                    "prev_value",
-                    "prev_key_padding_mask",
-                ]:
-                    if key_value_attention_mask == "prev_key_padding_mask":
-                        constructed_prompt_layer[prompt_pos][
-                            key_value_attention_mask
-                        ] = torch.cat(
-                            [
-                                new_prefix[layer_number][prompt_pos][
-                                    key_value_attention_mask
-                                ],
-                                constructed_prompt_layer[prompt_pos][
-                                    key_value_attention_mask
-                                ],
-                            ],
-                            dim=1,
-                        )
-                    else:
-                        constructed_prompt_layer[prompt_pos][
-                            key_value_attention_mask
-                        ] = torch.cat(
-                            [
-                                new_prefix[layer_number][prompt_pos][
-                                    key_value_attention_mask
-                                ],
-                                constructed_prompt_layer[prompt_pos][
-                                    key_value_attention_mask
-                                ],
-                            ],
-                            dim=2,
-                        )
     return constructed_prompt
 
 
@@ -277,30 +172,6 @@ class Model(PushToHubFriendlyModel):
             }
         )
 
-        # The shared-prefix module
-        self.multi_prefix["new_prefix"] = nn.ModuleDict(
-            {
-                "wte": nn.Embedding(self.preseqlen, self.n_embd),
-                "control_trans": nn.Sequential(
-                    nn.Linear(self.n_embd, self.mid_dim),
-                    nn.ReLU(),
-                    nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
-                ),
-                "wte_enc": nn.Embedding(self.preseqlen, self.n_embd),
-                "control_trans_enc": nn.Sequential(
-                    nn.Linear(self.n_embd, self.mid_dim),
-                    nn.ReLU(),
-                    nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
-                ),
-                "wte_dec": nn.Embedding(self.preseqlen, self.n_embd),
-                "control_trans_dec": nn.Sequential(
-                    nn.Linear(self.n_embd, self.mid_dim),
-                    nn.ReLU(),
-                    nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
-                ),
-                "dropout": nn.Dropout(args.prefix_tuning.prefix_dropout),
-            }
-        )
 
         if self.args.model.freeze_plm:
             for param in self.pretrain_model.parameters():
@@ -327,11 +198,13 @@ class Model(PushToHubFriendlyModel):
             .unsqueeze(0)
             .expand(bsz, -1)
         )
+        
         input_tokens = (
             input_tokens.to("cuda")
             if torch.cuda.is_available()
             else input_tokens.to("cpu")
         )
+        
         temp_control = self.multi_prefix[task_name]["wte"](input_tokens)
         if description is not None:
             temp_control = temp_control + description.repeat_interleave(
@@ -390,12 +263,13 @@ class Model(PushToHubFriendlyModel):
             .unsqueeze(0)
             .expand(old_bsz, -1)
         )
+      
         input_tokens_enc = (
             input_tokens_enc.to("cuda")
             if torch.cuda.is_available()
             else input_tokens_enc.to("cpu")
         )
-
+       
         temp_control_enc = self.multi_prefix[task_name]["wte_enc"](input_tokens_enc)
         if description is not None:
             temp_control_enc = temp_control_enc + description.unsqueeze(1)
@@ -547,23 +421,12 @@ class Model(PushToHubFriendlyModel):
             module_weight_location,
         ) in self.task_name_prefix_len_module_weight_location:
             all_past_prompt[task_name] = self.get_prompt(
-                bsz=1
-                if self.args.model.prefix_agg_strategy in ["simple_separate", "separate_with_new_prefix"]
-                else bsz,
+                bsz=bsz,
                 task_name=task_name,
                 prefix_len=prefix_len,
                 description=description_representation,
                 knowledge=knowledge_representation,
             )
-        # get the past key, value and padding mask of shared
-        all_past_prompt["new_prefix"] = self.get_prompt(
-            bsz=bsz,
-            task_name="new_prefix",
-            prefix_len=self.preseqlen,
-            description=description_representation,
-            knowledge=knowledge_representation,
-        )
-
         # Task name list, a batch of task name
         task_names_list = [self.args.task_id2task_name[task_id.item()] for task_id in kwargs.pop("task_ids")]
 
@@ -571,7 +434,6 @@ class Model(PushToHubFriendlyModel):
         past_prompt = aggregate_prompt(
             all_past_prompt,
             task_names_list,
-            strategy=self.args.model.prefix_agg_strategy,
         )
 
         loss = self.pretrain_model(
@@ -601,24 +463,13 @@ class Model(PushToHubFriendlyModel):
             module_weight_location,
         ) in self.task_name_prefix_len_module_weight_location:
             all_past_prompt[task_name] = self.get_prompt(
-                bsz=1
-                if self.args.model.prefix_agg_strategy in ["simple_separate", "separate_with_new_prefix"]
-                else bsz,
+                bsz=bsz,
                 sample_size=kwargs["num_beams"],
                 task_name=task_name,
                 prefix_len=prefix_len,
                 description=description_representation,
                 knowledge=knowledge_representation,
             )
-        # get the past key, value and padding mask of shared
-        all_past_prompt["new_prefix"] = self.get_prompt(
-            bsz=bsz,
-            sample_size=kwargs["num_beams"],
-            task_name="new_prefix",
-            prefix_len=self.preseqlen,
-            description=description_representation,
-            knowledge=knowledge_representation,
-        )
 
         # Task name list, a batch of task name
         task_names_list = [self.args.task_id2task_name[task_id.item()] for task_id in kwargs.pop("task_ids")]
@@ -627,7 +478,6 @@ class Model(PushToHubFriendlyModel):
         past_prompt = aggregate_prompt(
             all_past_prompt,
             task_names_list,
-            strategy=self.args.model.prefix_agg_strategy
         )
 
         generated_ids = self.pretrain_model.generate(
