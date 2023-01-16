@@ -2,7 +2,7 @@
 import os
 
 # domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai', 'mt_waimai', 'mt_youxuan']
-domain_list = ['mt_maicai', 'mt_waimai', 'mt_youxuan']
+domain_list = ['mt_maoyanyanchu']
 output_folder = 'output/T5_base_ft_w_prefix_ahead/single_domain/'
 for domain_name in domain_list:
     output_path = output_folder + domain_name
@@ -30,15 +30,15 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --logging_first_step true \
     --logging_steps 100 \
     --evaluation_strategy steps \
-    --eval_steps 1000 \
+    --eval_steps 500 \
     --metric_for_best_model avr \
     --greater_is_better true \
     --save_strategy steps \
-    --save_steps 1000 \
+    --save_steps 500 \
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \
-    --learning_rate 1e-3 \
+    --learning_rate 3e-4 \
     --predict_with_generate \
     --overwrite_output_dir \
     --per_device_train_batch_size 4 \
