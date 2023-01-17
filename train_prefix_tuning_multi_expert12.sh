@@ -8,7 +8,7 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --run_name expert4_de_phm32_top2gate \
     --local_rank -1 \
     --seed 3407 \
-    --cfg Salesforce/T5_base_prefix_summary_5domains_upsample2_res_expert8.cfg \
+    --cfg Salesforce/T5_base_prefix_summary_5domains_upsample2_res_expert12.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \

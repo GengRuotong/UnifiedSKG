@@ -286,18 +286,21 @@ class Model(PushToHubFriendlyModel):
                     nn.ReLU(),
                     nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
                 ),
+                "norm": nn.LayerNorm(self.match_n_embd),
                 "wte_enc": nn.Embedding(self.preseqlen, self.n_embd),
                 "control_trans_enc": nn.Sequential(
                     nn.Linear(self.n_embd, self.mid_dim),
                     nn.ReLU(),
                     nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
                 ),
+                "norm_enc": nn.LayerNorm(self.match_n_embd),
                 "wte_dec": nn.Embedding(self.preseqlen, self.n_embd),
                 "control_trans_dec": nn.Sequential(
                     nn.Linear(self.n_embd, self.mid_dim),
                     nn.ReLU(),
                     nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.n_embd),
                 ),
+                "norm_dec": nn.LayerNorm(self.match_n_embd),
                 "dropout": nn.Dropout(args.prefix_tuning.prefix_dropout),
             }
         )
@@ -340,6 +343,8 @@ class Model(PushToHubFriendlyModel):
         past_key_values = self.multi_prefix[task_name]["control_trans"](
             temp_control
         )  # bsz, seqlen, layer*emb
+        res_temp_control = temp_control.repeat(1, 1, 2 * self.num_base_layers)
+        past_key_values += res_temp_control
         if knowledge is not None:
             past_key_values = torch.cat(
                 [
@@ -354,6 +359,7 @@ class Model(PushToHubFriendlyModel):
             bsz, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
         )
         past_key_values = self.multi_prefix[task_name]["dropout"](past_key_values)
+        past_key_values = self.multi_prefix[task_name]["norm"](past_key_values)
         past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
 
         # Cross prefix
@@ -365,6 +371,8 @@ class Model(PushToHubFriendlyModel):
         past_key_values_dec = self.multi_prefix[task_name]["control_trans_dec"](
             temp_control_dec
         )  # bsz, seqlen, layer*emb
+        res_temp_control_dec = temp_control_dec.repeat(1, 1, 2 * self.num_base_layers)
+        past_key_values_dec += res_temp_control_dec
         if knowledge is not None:
             past_key_values_dec = torch.cat(
                 [
@@ -381,6 +389,7 @@ class Model(PushToHubFriendlyModel):
         past_key_values_dec = self.multi_prefix[task_name]["dropout"](
             past_key_values_dec
         )
+        past_key_values_dec = self.multi_prefix[task_name]["norm_dec"](past_key_values_dec)
         past_key_values_dec = past_key_values_dec.permute([2, 0, 3, 1, 4]).split(2)
 
         # Encoder prefix
@@ -402,6 +411,8 @@ class Model(PushToHubFriendlyModel):
         past_key_values_enc = self.multi_prefix[task_name]["control_trans_enc"](
             temp_control_enc
         )  # bsz, seqlen, layer*emb
+        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2 * self.num_base_layers)
+        past_key_values_enc += res_temp_control_enc
         if knowledge is not None:
             past_key_values_enc = torch.cat(
                 [
@@ -422,6 +433,7 @@ class Model(PushToHubFriendlyModel):
         past_key_values_enc = self.multi_prefix[task_name]["dropout"](
             past_key_values_enc
         )
+        past_key_values_enc = self.multi_prefix[task_name]["norm_enc"](past_key_values_enc)
         past_key_values_enc = past_key_values_enc.permute([2, 0, 3, 1, 4]).split(2)
 
         result = []
