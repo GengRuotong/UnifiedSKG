@@ -5,7 +5,7 @@ export WANDB_PROJECT=T5_base_prefix_tuning_new
 export WANDB_ENTITY=ruotonggeng
 
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 train.py \
-    --run_name expert4_de_phm32_top2gate \
+    --run_name expert12_de_phm32_top2gate \
     --local_rank -1 \
     --seed 3407 \
     --cfg Salesforce/T5_base_prefix_summary_5domains_upsample2_res_expert12.cfg \
