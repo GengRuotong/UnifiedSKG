@@ -14,31 +14,39 @@ logger = logging.getLogger(__name__)
 
 def get_phm_rule_expert(base_layer_num=12, 
                         phm_dim=32,
+                        moe_expert_num=8,
                         strategy: str='plus',
                         phm_rank=1,
                         phm_rule_expert_share: bool=False,
                         share_kv: bool=False):
     assert strategy in ['plus', 'concat', 'mat']
-    # phm_rule_expert.data.normal_(mean=0, std=0.0001)
-    if not phm_rule_expert_share:
-        return None
+    if share_kv:
+        phm_rule_num = 1
     else:
-        if share_kv:
-            if strategy == 'mat':
-                phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_dim * phm_rank, phm_dim)) for _ in range(base_layer_num)]
-            elif strategy == 'plus':
-                phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_dim * phm_dim, phm_dim)) for _ in range(base_layer_num)]
-            else:
-                phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_dim * phm_dim, phm_dim // 2)) for _ in range(base_layer_num)]
+        phm_rule_num = 2
+    if phm_rule_expert_share:
+        if strategy == 'mat':
+            phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_rule_num * phm_dim * phm_rank, phm_dim)) for _ in range(base_layer_num)]
+        elif strategy == 'plus':
+            phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_rule_num * phm_dim * phm_dim, phm_dim)) for _ in range(base_layer_num)]
         else:
-            if strategy == 'mat':
-                phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_rank, phm_dim)) for _ in range(base_layer_num)]
-            elif strategy == 'plus':
-                phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim)) for _ in range(base_layer_num)]
-            else:
-                phm_rule_expert = [nn.Parameter(torch.FloatTensor(2*phm_dim * phm_dim, phm_dim // 2)) for _ in range(base_layer_num)]
+            phm_rule_expert = [nn.Parameter(torch.FloatTensor(phm_rule_num * phm_dim * phm_dim, phm_dim // 2)) for _ in range(base_layer_num)]
         for item in phm_rule_expert:
             item.data.normal_(mean=0, std=0.0001)
+        return phm_rule_expert
+    else:
+        phm_rule_expert = []
+        for i in range(base_layer_num):
+            if strategy == 'mat':
+                phm_rule_expert.append([nn.Parameter(torch.FloatTensor(phm_rule_num * phm_dim * phm_rank, phm_dim)) for _ in range(moe_expert_num)])
+            elif strategy == 'plus':
+                phm_rule_expert.append([nn.Parameter(torch.FloatTensor(phm_rule_num * phm_dim * phm_dim, phm_dim)) for _ in range(moe_expert_num)])
+            else:
+                phm_rule_expert.append([nn.Parameter(torch.FloatTensor(phm_rule_num * phm_dim * phm_dim, phm_dim // 2)) for _ in range(moe_expert_num)])
+        
+        for layer_expert in phm_rule_expert:
+            for item in layer_expert:
+                item.data.normal_(mean=0, std=0.0001)
         return phm_rule_expert
 
 def get_phm_rule_shared(

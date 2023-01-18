@@ -1,9 +1,8 @@
 # python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py
 import os
-
-# domain_list = ['mt_maoyanyanchu', 'mt_taxi-yonghu', 'mt_maicai', 'mt_waimai', 'mt_youxuan']
-domain_list = ['mt_maoyanyanchu']
-output_folder = 'output/T5_base_ft_w_prefix_ahead/single_domain/'
+# domain_list = ['mt_maoyanyanchu']
+domain_list = ['mt_taxi-yonghu', 'mt_maicai', 'mt_waimai', 'mt_youxuan']
+output_folder = 'output/T5_base_ft_wo_prefix_5domains/single_domain/'
 for domain_name in domain_list:
     output_path = output_folder + domain_name
     os.system("""
@@ -16,10 +15,10 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm False \
     --domain_name %s \
-    --data_folder_path data/sample_datas_w_prefix_ahead/ \
+    --data_folder_path data/sample_datas_wo_prefix/ \
     --output_dir %s \
     --seed 2 \
-    --cfg Salesforce/T5_base_finetune_summary.cfg \
+    --cfg Salesforce/T5_base_finetune_summary_5domains_upsample2.cfg \
     --do_train \
     --do_eval \
     --do_predict \
@@ -30,15 +29,15 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --logging_first_step true \
     --logging_steps 100 \
     --evaluation_strategy steps \
-    --eval_steps 500 \
+    --eval_steps 1000 \
     --metric_for_best_model avr \
     --greater_is_better true \
     --save_strategy steps \
-    --save_steps 500 \
+    --save_steps 1000 \
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \
-    --learning_rate 3e-4 \
+    --learning_rate 8e-4 \
     --predict_with_generate \
     --overwrite_output_dir \
     --per_device_train_batch_size 4 \
@@ -47,4 +46,4 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --generation_max_length 128 \
     --input_max_length 512 \
     --num_beams=1
-""" %(domain_name + '_ahead_new', domain_name, output_path))
+""" %(domain_name + '_wo_prefix', domain_name, output_path))
