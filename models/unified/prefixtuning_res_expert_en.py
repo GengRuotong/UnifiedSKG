@@ -86,7 +86,26 @@ class Model(PushToHubFriendlyModel):
         self.num_up_layers = self.match_n_layer - self.num_base_layers
         # dec
         self.wte = nn.Embedding(self.preseqlen, self.n_embd)
-        if 'decoder' in self.block_w_base:
+        self.control_trans = nn.Sequential(
+            nn.Linear(self.n_embd, self.mid_dim),
+            nn.ReLU(),
+            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
+        )
+        self.norm = nn.LayerNorm(self.match_n_embd)
+
+        # cross
+        self.wte_dec = nn.Embedding(self.preseqlen, self.n_embd)
+        self.control_trans_dec = nn.Sequential(
+            nn.Linear(self.n_embd, self.mid_dim),
+            nn.ReLU(),
+            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
+        )
+        self.norm_dec = nn.LayerNorm(self.match_n_embd)
+        self.dropout = nn.Dropout(args.prefix_tuning.prefix_dropout)
+
+        # enc
+        self.wte_enc = nn.Embedding(self.preseqlen, self.n_embd)
+        if 'encoder' in self.block_w_base:
             self.gate = get_gate_instance(
                 model_dim=self.n_embd,
                 num_expert=self.moe_expert_count,
@@ -122,7 +141,7 @@ class Model(PushToHubFriendlyModel):
             )
             if self.num_up_layers > 0:
                 # self.up_project = nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd)
-                self.up_project = nn.Sequential(
+                self.up_project_enc = nn.Sequential(
                     nn.Linear(self.n_embd, self.mid_dim),
                     nn.ReLU(),
                     nn.Linear(self.mid_dim, self.num_up_layers * 2 * self.match_n_head * self.match_n_embd),
@@ -144,34 +163,14 @@ class Model(PushToHubFriendlyModel):
                             phm_rank=self.phm_rank,
                             strategy=self.strategy,
                             share_kv=self.share_kv) for i in range(self.num_base_layers)]
-            self.base_layer_net = nn.ModuleList(base_layer_net)
+            self.base_layer_net_enc = nn.ModuleList(base_layer_net)
         else:
-            self.control_trans = nn.Sequential(
+            self.control_trans_enc = nn.Sequential(
                 nn.Linear(self.n_embd, self.mid_dim),
                 nn.ReLU(),
                 nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
             )
-        self.norm = nn.LayerNorm(self.match_n_embd)
-        
-        # enc
-        self.wte_enc = nn.Embedding(self.preseqlen, self.n_embd)
-        self.control_trans_enc = nn.Sequential(
-            nn.Linear(self.n_embd, self.mid_dim),
-            nn.ReLU(),
-            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
-        )
         self.norm_enc = nn.LayerNorm(self.match_n_embd)
-
-        # cross
-        self.wte_dec = nn.Embedding(self.preseqlen, self.n_embd)
-        self.control_trans_dec = nn.Sequential(
-            nn.Linear(self.n_embd, self.mid_dim),
-            nn.ReLU(),
-            nn.Linear(self.mid_dim, self.match_n_layer * 2 * self.match_n_head * self.match_n_embd),
-        )
-        self.norm_dec = nn.LayerNorm(self.match_n_embd)
-        self.dropout = nn.Dropout(args.prefix_tuning.prefix_dropout)
-
         if self.args.model.freeze_plm:
             for param in self.pretrain_model.parameters():
                 param.requires_grad = False
@@ -192,31 +191,22 @@ class Model(PushToHubFriendlyModel):
         of the attention blocks. Can be used to speed up decoding.
         '''
         balance_loss = 0.0
-        # Decoder Prefix
+        # decoder prefix
         old_bsz = bsz
         bsz = bsz * sample_size
         input_tokens = self.input_tokens.unsqueeze(0).expand(bsz, -1) # bsz, seqlen
         temp_control = self.wte(input_tokens)
-        if 'decoder' in self.block_w_base:
-            base_layer_control_list = []
-            for i in range(self.num_base_layers):
-                base_layer_control_per_layer, l_aux = self.base_layer_net[i](temp_control)
-                balance_loss += l_aux
-                base_layer_control_list.append(base_layer_control_per_layer)
-            base_layer_control = torch.cat(base_layer_control_list, dim=-1)
-            if self.num_up_layers > 0:
-                up_control = self.up_project(temp_control)
-                base_layer_control = torch.cat([up_control, base_layer_control], dim=-1)
-            past_key_values = base_layer_control
-        else:
-            past_key_values = self.control_trans(temp_control)
-        res_temp_control = temp_control.repeat(1, 1, 2 * self.match_n_layer)
+        past_key_values = self.control_trans(temp_control)
+        res_temp_control = temp_control.repeat(1, 1, 2*self.match_n_layer)
         past_key_values += res_temp_control
-        
         bsz, seqlen, _ = past_key_values.shape
         past_key_values = past_key_values.view(
-            bsz, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
-        ) # bsz = 8, seqlen = 10, past_key_values.shape = torch.Size([8, 10, 24, 12, 64])
+            bsz,
+            seqlen,
+            self.match_n_layer * 2,
+            self.match_n_head,
+            self.match_n_embd,
+        )
         past_key_values = self.dropout(past_key_values)
         past_key_values = self.norm(past_key_values)
         past_key_values = past_key_values.permute([2, 0, 3, 1, 4]).split(2)
@@ -234,21 +224,30 @@ class Model(PushToHubFriendlyModel):
         past_key_values_dec = self.dropout(past_key_values_dec)
         past_key_values_dec = self.norm_dec(past_key_values_dec)
         past_key_values_dec = past_key_values_dec.permute([2, 0, 3, 1, 4]).split(2)
-
-        # Encoder prefix
-        input_tokens_enc = (self.input_tokens.unsqueeze(0).expand(old_bsz, -1))
+        
+        # encoder Prefix
+        input_tokens_enc = self.input_tokens.unsqueeze(0).expand(old_bsz, -1) # bsz, seqlen
         temp_control_enc = self.wte_enc(input_tokens_enc)
-        past_key_values_enc = self.control_trans_enc(temp_control_enc)
-        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2*self.match_n_layer)
+        if 'encoder' in self.block_w_base:
+            base_layer_control_list = []
+            for i in range(self.num_base_layers):
+                base_layer_control_per_layer, l_aux = self.base_layer_net_enc[i](temp_control_enc)
+                balance_loss += l_aux
+                base_layer_control_list.append(base_layer_control_per_layer)
+            base_layer_control = torch.cat(base_layer_control_list, dim=-1)
+            if self.num_up_layers > 0:
+                up_control = self.up_project_enc(temp_control_enc)
+                base_layer_control = torch.cat([up_control, base_layer_control], dim=-1)
+            past_key_values_enc = base_layer_control
+        else:
+            past_key_values_enc = self.control_trans_enc(temp_control_enc)
+        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2 * self.match_n_layer)
         past_key_values_enc += res_temp_control_enc
+        
         bsz_enc, seqlen, _ = past_key_values_enc.shape
         past_key_values_enc = past_key_values_enc.view(
-            bsz_enc,
-            seqlen,
-            self.match_n_layer * 2,
-            self.match_n_head,
-            self.match_n_embd,
-        )
+            bsz_enc, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
+        ) # bsz = 8, seqlen = 10, past_key_values.shape = torch.Size([8, 10, 24, 12, 64])
         past_key_values_enc = self.dropout(past_key_values_enc)
         past_key_values_enc = self.norm_enc(past_key_values_enc)
         past_key_values_enc = past_key_values_enc.permute([2, 0, 3, 1, 4]).split(2)

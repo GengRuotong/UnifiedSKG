@@ -4,7 +4,7 @@ export WANDB_API_KEY=3b9858e8352beadda80313599d455c2abfde4ba7
 export WANDB_PROJECT=T5_base_prefix_tuning_new
 export WANDB_ENTITY=ruotonggeng
 
-CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 train.py \
+python -m torch.distributed.launch --nproc_per_node 2 --master_port 1234 train.py \
     --run_name mt_single_initial_multi_tune \
     --seed 2 \
     --cfg Salesforce/T5_base_prefix_summary_5domains_upsample2_combined_prefix.cfg \

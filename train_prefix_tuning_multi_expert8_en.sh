@@ -12,7 +12,7 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
-    --output_dir output/T5_base_prefix_tuning/5domain_expert8_enphm32_top2gate \
+    --output_dir output/T5_base_prefix_tuning/5domain_expert8_en_phm32_top2gate \
     --do_train \
     --do_eval \
     --do_predict \

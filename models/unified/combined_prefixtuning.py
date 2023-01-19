@@ -250,6 +250,7 @@ class Model(PushToHubFriendlyModel):
                                 self.mid_dim, self.match_n_layer * 2 * self.n_embd
                             ),
                         ),
+                        "norm": nn.LayerNorm(self.match_n_embd),
                         "wte_enc": nn.Embedding(
                             prefix_len, self.n_embd
                         ),
@@ -260,6 +261,7 @@ class Model(PushToHubFriendlyModel):
                                 self.mid_dim, self.match_n_layer * 2 * self.n_embd
                             ),
                         ),
+                        "norm_enc": nn.LayerNorm(self.match_n_embd),
                         "wte_dec": nn.Embedding(
                             prefix_len, self.n_embd
                         ),
@@ -270,6 +272,7 @@ class Model(PushToHubFriendlyModel):
                                 self.mid_dim, self.match_n_layer * 2 * self.n_embd
                             ),
                         ),
+                        "norm_dec": nn.LayerNorm(self.match_n_embd),
                         "dropout": nn.Dropout(args.prefix_tuning.prefix_dropout),
                     }
                 )
@@ -330,11 +333,13 @@ class Model(PushToHubFriendlyModel):
             .unsqueeze(0)
             .expand(bsz, -1)
         )
+       
         input_tokens = (
             input_tokens.to("cuda")
             if torch.cuda.is_available()
             else input_tokens.to("cpu")
         )
+        
         temp_control = self.multi_prefix[task_name]["wte"](input_tokens)
         if description is not None:
             temp_control = temp_control + description.repeat_interleave(
@@ -343,7 +348,7 @@ class Model(PushToHubFriendlyModel):
         past_key_values = self.multi_prefix[task_name]["control_trans"](
             temp_control
         )  # bsz, seqlen, layer*emb
-        res_temp_control = temp_control.repeat(1, 1, 2 * self.num_base_layers)
+        res_temp_control = temp_control.repeat(1, 1, 2 * self.match_n_layer)
         past_key_values += res_temp_control
         if knowledge is not None:
             past_key_values = torch.cat(
@@ -371,7 +376,7 @@ class Model(PushToHubFriendlyModel):
         past_key_values_dec = self.multi_prefix[task_name]["control_trans_dec"](
             temp_control_dec
         )  # bsz, seqlen, layer*emb
-        res_temp_control_dec = temp_control_dec.repeat(1, 1, 2 * self.num_base_layers)
+        res_temp_control_dec = temp_control_dec.repeat(1, 1, 2 * self.match_n_layer)
         past_key_values_dec += res_temp_control_dec
         if knowledge is not None:
             past_key_values_dec = torch.cat(
@@ -399,19 +404,20 @@ class Model(PushToHubFriendlyModel):
             .unsqueeze(0)
             .expand(old_bsz, -1)
         )
+        
         input_tokens_enc = (
             input_tokens_enc.to("cuda")
             if torch.cuda.is_available()
             else input_tokens_enc.to("cpu")
         )
-
+        
         temp_control_enc = self.multi_prefix[task_name]["wte_enc"](input_tokens_enc)
         if description is not None:
             temp_control_enc = temp_control_enc + description.unsqueeze(1)
         past_key_values_enc = self.multi_prefix[task_name]["control_trans_enc"](
             temp_control_enc
         )  # bsz, seqlen, layer*emb
-        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2 * self.num_base_layers)
+        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2 * self.match_n_layer)
         past_key_values_enc += res_temp_control_enc
         if knowledge is not None:
             past_key_values_enc = torch.cat(

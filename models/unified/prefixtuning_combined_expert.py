@@ -353,6 +353,8 @@ class Model(PushToHubFriendlyModel):
         past_key_values_dec = self.multi_prefix[task_name]["control_trans_dec"](
             temp_control_dec
         )  # bsz, seqlen, layer*emb
+        res_temp_control_dec = temp_control_dec.repeat(1, 1, 2 * self.num_base_layers)
+        past_key_values_dec += res_temp_control_dec
 
         bsz, seqlen, _ = past_key_values_dec.shape
         past_key_values_dec = past_key_values_dec.view(
@@ -381,7 +383,8 @@ class Model(PushToHubFriendlyModel):
         past_key_values_enc = self.multi_prefix[task_name]["control_trans_enc"](
             temp_control_enc
         )  # bsz, seqlen, layer*emb
-
+        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2 * self.num_base_layers)
+        past_key_values_enc += res_temp_control_enc
         bsz_enc, seqlen, _ = past_key_values_enc.shape
         past_key_values_enc = past_key_values_enc.view(
             bsz_enc,
@@ -390,6 +393,7 @@ class Model(PushToHubFriendlyModel):
             self.match_n_head,
             self.match_n_embd,
         )
+        
         past_key_values_enc = self.multi_prefix[task_name]["dropout"](past_key_values_enc)
         past_key_values_enc = self.multi_prefix[task_name]["norm_enc"](past_key_values_enc)
         past_key_values_enc = past_key_values_enc.permute([2, 0, 3, 1, 4]).split(2)
