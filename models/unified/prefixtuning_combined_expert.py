@@ -93,6 +93,7 @@ class Model(PushToHubFriendlyModel):
         self.project_struct = args.expert.project_struct
         self.use_xmoe = args.expert.use_xmoe
         self.phm_rule_per_layer_share = args.expert.phm_rule_per_layer_share
+        self.phm_rule_expert_share = args.expert.phm_rule_expert_share
         self.share_kv = args.expert.share_kv_down
         self.phm_expert = args.expert.phm_expert
         
@@ -217,22 +218,24 @@ class Model(PushToHubFriendlyModel):
             self.phm_rule_expert_down = get_phm_rule_expert(
                 base_layer_num=self.num_base_layers,
                 phm_dim=self.phm_dim, 
-                phm_rule_expert_share=True,
+                phm_rule_expert_share=self.phm_rule_expert_share,
                 strategy=self.strategy,
-                share_kv=self.share_kv)
+                share_kv=self.share_kv,
+            )
 
             self.phm_rule_expert_up = get_phm_rule_expert(
                 base_layer_num=self.num_base_layers,
                 phm_dim=self.phm_dim, 
-                phm_rule_expert_share=True,
-                strategy=self.strategy)
+                phm_rule_expert_share=self.phm_rule_expert_share,
+                strategy=self.strategy
+                )
 
             self.phm_rule_shared_down = get_phm_rule_shared(
                 phm_dim=self.phm_dim,
                 moe_expert_count=self.moe_expert_count,
                 phm_rule_per_layer_share=self.phm_rule_per_layer_share,
                 strategy=self.strategy,
-                share_kv=True
+                share_kv=self.share_kv
             )
             self.phm_rule_shared_up = get_phm_rule_shared(
                 phm_dim=self.phm_dim,
@@ -281,11 +284,13 @@ class Model(PushToHubFriendlyModel):
             .unsqueeze(0)
             .expand(bsz, -1)
         )
+       
         input_tokens = (
             input_tokens.to("cuda")
             if torch.cuda.is_available()
             else input_tokens.to("cpu")
         )
+       
         balance_loss = 0.0
         # Decoder Prefix
         temp_control = self.wte_expert(input_tokens)
@@ -330,11 +335,13 @@ class Model(PushToHubFriendlyModel):
             .unsqueeze(0)
             .expand(bsz, -1)
         )
+       
         input_tokens = (
             input_tokens.to("cuda")
             if torch.cuda.is_available()
             else input_tokens.to("cpu")
         )
+        
         temp_control = self.multi_prefix[task_name]["wte"](input_tokens)
         past_key_values = self.multi_prefix[task_name]["control_trans"](temp_control)
         res_temp_control = temp_control.repeat(1, 1, 2 * self.num_up_layers)
@@ -353,9 +360,8 @@ class Model(PushToHubFriendlyModel):
         past_key_values_dec = self.multi_prefix[task_name]["control_trans_dec"](
             temp_control_dec
         )  # bsz, seqlen, layer*emb
-        res_temp_control_dec = temp_control_dec.repeat(1, 1, 2 * self.num_base_layers)
+        res_temp_control_dec = temp_control_dec.repeat(1, 1, 2 * self.match_n_layer)
         past_key_values_dec += res_temp_control_dec
-
         bsz, seqlen, _ = past_key_values_dec.shape
         past_key_values_dec = past_key_values_dec.view(
             bsz, seqlen, self.match_n_layer * 2, self.match_n_head, self.match_n_embd
@@ -373,17 +379,18 @@ class Model(PushToHubFriendlyModel):
             .unsqueeze(0)
             .expand(old_bsz, -1)
         )
+        
         input_tokens_enc = (
             input_tokens_enc.to("cuda")
             if torch.cuda.is_available()
             else input_tokens_enc.to("cpu")
         )
-
+       
         temp_control_enc = self.multi_prefix[task_name]["wte_enc"](input_tokens_enc)
         past_key_values_enc = self.multi_prefix[task_name]["control_trans_enc"](
             temp_control_enc
         )  # bsz, seqlen, layer*emb
-        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2 * self.num_base_layers)
+        res_temp_control_enc = temp_control_enc.repeat(1, 1, 2 * self.match_n_layer)
         past_key_values_enc += res_temp_control_enc
         bsz_enc, seqlen, _ = past_key_values_enc.shape
         past_key_values_enc = past_key_values_enc.view(
