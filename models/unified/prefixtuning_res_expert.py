@@ -293,7 +293,7 @@ class Model(PushToHubFriendlyModel):
         bsz = input_ids.shape[0]
 
         past_prompt, balance_loss = self.get_prompt(bsz=bsz)
-
+       
         mle_loss = self.pretrain_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
