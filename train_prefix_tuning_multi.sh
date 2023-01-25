@@ -5,14 +5,14 @@ export WANDB_PROJECT=T5_base_prefix_tuning_new
 export WANDB_ENTITY=ruotonggeng
 
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 train.py \
-    --run_name expert8_de_phm32_top2gate_prelen30 \
+    --run_name prefix_tuning_multi \
     --local_rank -1 \
-    --seed 3407 \
-    --cfg Salesforce/T5_base_prefix_summary_5domains_upsample2_res_expert8_prelen30.cfg \
+    --seed 2 \
+    --cfg Salesforce/T5_base_prefix_summary.cfg \
     --pretrained_model_path pretrained_model/chinese_t5_pegasus_base/ \
     --freeze_plm True \
     --data_folder_path data/sample_datas_wo_prefix \
-    --output_dir output/T5_base_prefix_tuning/5domain_expert8_dephm32_top2gate_prelen30 \
+    --output_dir output/T5_base_prefix_tuning/5domain_prefix_multi \
     --do_train \
     --do_eval \
     --do_predict \
@@ -24,11 +24,11 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --logging_first_step true \
     --logging_steps 100 \
     --evaluation_strategy steps \
-    --eval_steps 10000 \
+    --eval_steps 5000 \
     --metric_for_best_model avr \
     --greater_is_better true \
     --save_strategy steps \
-    --save_steps 10000 \
+    --save_steps 5000 \
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \
