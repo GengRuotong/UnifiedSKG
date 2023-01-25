@@ -18,7 +18,7 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --do_predict \
     --predict_with_generate \
     --overwrite_output_dir \
-    --num_train_epochs 40 \
+    --num_train_epochs 50 \
     --gradient_accumulation_steps 1 \
     --logging_strategy steps \
     --logging_first_step true \
