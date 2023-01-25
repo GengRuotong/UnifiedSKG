@@ -24,11 +24,11 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node 2 t
     --logging_first_step true \
     --logging_steps 100 \
     --evaluation_strategy steps \
-    --eval_steps 10000 \
+    --eval_steps 5000 \
     --metric_for_best_model avr \
     --greater_is_better true \
     --save_strategy steps \
-    --save_steps 10000 \
+    --save_steps 5000 \
     --save_total_limit 1 \
     --load_best_model_at_end \
     --adafactor true \
